@@ -64,10 +64,16 @@ local function registerSites()
 			local content = Bridge.api.getContent("webpage", item.tag) or {}
 			local data = content.data or {}
 			local title = data.title or data.name or tostring(item.tag)
+			-- use whatever readable text the datapack page has
+			local parts = {}
+			for _, field in ipairs({ "description", "desc", "text", "body", "content", "summary" }) do
+				if type(data[field]) == "string" and data[field] ~= "" then table.insert(parts, data[field]) end
+			end
 			Network.register({
 				addr = addr, name = tostring(title), org = "unregistered", tier = 1, ice = 0,
 				kind = "site", known = true,
-				site = { text = tostring(title) .. "\n\nCyberScript site from datapack: " .. tostring(item.datapack or "unknown") },
+				site = { text = tostring(title) .. "\n\n" .. (#parts > 0 and table.concat(parts, "\n\n") .. "\n\n" or "") ..
+					"CyberScript site from datapack: " .. tostring(item.datapack or "unknown") },
 			})
 			Bridge.sites[item.tag] = addr
 		end

@@ -23,6 +23,7 @@ function Network.newState()
 		heat = 0,     -- NetWatch heat, 0-100
 		news = {},    -- recent world events, newest last
 		homeFiles = {}, -- documents saved to V's home computers: { name, text }
+		market = nil,   -- created by modules/market on first use
 	}
 end
 

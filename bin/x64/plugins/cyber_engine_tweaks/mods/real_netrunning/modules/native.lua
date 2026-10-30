@@ -6,6 +6,7 @@ local Shell = require("modules/shell")
 local Network = require("modules/network")
 local World = require("modules/world")
 local Rng = require("modules/rng")
+local Web = require("modules/web")
 
 local Native = {
 	service = nil,
@@ -211,6 +212,25 @@ local function saveToHome(name, text)
 	World.notify("Saved to your home computer")
 end
 
+local pageKinds = { text = 0, title = 1, link = 2, good = 3, bad = 4, note = 5 }
+
+-- A Browser window asked for a page.
+local function servePage(url)
+	local svc = Native.service
+	local ok, p = pcall(Web.render, url)
+	if not ok then
+		Native.log("page " .. tostring(url) .. " failed: " .. tostring(p))
+		p = { title = "ERROR", url = url, lines = { { text = "This page failed to load.", link = "", kind = "bad" } } }
+	end
+	call(function()
+		svc:BeginPage(url, p.title or "", p.url or url)
+		for _, l in ipairs(p.lines) do
+			svc:AddPageLine(url, l.text or "", l.link or "", pageKinds[l.kind] or 0)
+		end
+		svc:PageReady(url)
+	end)
+end
+
 function Native.isOpen()
 	local svc = Native.service
 	return svc ~= nil and call(function() return svc:IsOpen() end) == true
@@ -246,6 +266,13 @@ function Native.update(dt)
 		if not has then break end
 		local request = call(function() return svc:TakeMachineRequest() end)
 		if request and request ~= "" then handleMachineRequest(request) end
+	end
+
+	for _ = 1, 5 do
+		local has = call(function() return svc:HasPageRequest() end)
+		if not has then break end
+		local url = call(function() return svc:TakePageRequest() end)
+		if url then servePage(url) end
 	end
 
 	for _ = 1, 5 do

@@ -19,6 +19,8 @@ local Shell = require("modules/shell")
 local Terminal = require("modules/terminal")
 local Bridge = require("modules/cyberscript")
 local Native = require("modules/native")
+local Market = require("modules/market")
+local Web = require("modules/web")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -101,6 +103,7 @@ registerForEvent("onInit", function()
 
 	Bus.on("*", newsFromEvents)
 	Bus.on("network.breached", Native.onBreached)
+	Market.attach(Bus)
 
 	-- Mod reloaded while already in game
 	if GameSession.IsLoaded() then startWorld() end
@@ -114,6 +117,7 @@ registerForEvent("onUpdate", function(dt)
 	if RealNetrunning.ready then
 		Native.update(dt)
 		Shell.update(dt)
+		Market.update(dt)
 	end
 end)
 

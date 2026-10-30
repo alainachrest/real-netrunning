@@ -25,6 +25,14 @@ public class RNFileEntry {
     public let locked: Bool;
 }
 
+// One line of a Browser page. kind: 0 text, 1 title, 2 link, 3 good, 4 bad, 5 note.
+public class RNPageLine {
+    public let url: String;
+    public let text: String;
+    public let link: String;
+    public let kind: Int32;
+}
+
 public class DeckService extends ScriptableService {
     private let m_lines: array<String>;
     private let m_kinds: array<Int32>;
@@ -49,6 +57,13 @@ public class DeckService extends ScriptableService {
     private let m_homeNames: array<String>;
     private let m_homeTexts: array<String>;
     private let m_heat: Int32;
+
+    // Browser pages, rendered by Lua on request
+    private let m_pageRequests: array<String>;
+    private let m_pageUrls: array<String>;
+    private let m_pageTitles: array<String>;
+    private let m_pageCanonical: array<String>;
+    private let m_pageLines: array<ref<RNPageLine>>;
 
     // Fixed limits, and defaults that don't rely on a start-up callback.
     private let m_traceSet: Bool;
@@ -258,6 +273,93 @@ public class DeckService extends ScriptableService {
             i += 1;
         }
         return "";
+    }
+
+    // --- browser pages ---------------------------------------------------------------
+
+    public func RequestPage(url: String) {
+        ArrayPush(this.m_pageRequests, url);
+    }
+
+    public func HasPageRequest() -> Bool {
+        return ArraySize(this.m_pageRequests) > 0;
+    }
+
+    public func TakePageRequest() -> String {
+        if ArraySize(this.m_pageRequests) == 0 {
+            return "";
+        }
+        let url = this.m_pageRequests[0];
+        ArrayErase(this.m_pageRequests, 0);
+        return url;
+    }
+
+    private func PageIndex(url: String) -> Int32 {
+        let i = 0;
+        while i < ArraySize(this.m_pageUrls) {
+            if Equals(this.m_pageUrls[i], url) {
+                return i;
+            }
+            i += 1;
+        }
+        return -1;
+    }
+
+    // Lua: BeginPage, then AddPageLine for each line, then PageReady.
+    public func BeginPage(url: String, title: String, canonical: String) {
+        let index = this.PageIndex(url);
+        if index < 0 {
+            ArrayPush(this.m_pageUrls, url);
+            ArrayPush(this.m_pageTitles, title);
+            ArrayPush(this.m_pageCanonical, canonical);
+        } else {
+            this.m_pageTitles[index] = title;
+            this.m_pageCanonical[index] = canonical;
+        }
+        let kept: array<ref<RNPageLine>>;
+        for line in this.m_pageLines {
+            if NotEquals(line.url, url) {
+                ArrayPush(kept, line);
+            }
+        }
+        this.m_pageLines = kept;
+    }
+
+    public func AddPageLine(url: String, text: String, link: String, kind: Int32) {
+        let line = new RNPageLine();
+        line.url = url;
+        line.text = text;
+        line.link = link;
+        line.kind = kind;
+        ArrayPush(this.m_pageLines, line);
+    }
+
+    public func PageReady(url: String) {
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                terminal.OnPageReady(url);
+            }
+        }
+    }
+
+    public func GetPageTitle(url: String) -> String {
+        let index = this.PageIndex(url);
+        return index >= 0 ? this.m_pageTitles[index] : "";
+    }
+
+    public func GetPageCanonical(url: String) -> String {
+        let index = this.PageIndex(url);
+        return index >= 0 ? this.m_pageCanonical[index] : url;
+    }
+
+    public func GetPageLines(url: String) -> array<ref<RNPageLine>> {
+        let result: array<ref<RNPageLine>>;
+        for line in this.m_pageLines {
+            if Equals(line.url, url) {
+                ArrayPush(result, line);
+            }
+        }
+        return result;
     }
 
     // --- tray --------------------------------------------------------------------

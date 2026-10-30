@@ -23,6 +23,8 @@ function Rng.new(...)
 	for i = 1, #parts do parts[i] = tostring(parts[i]) end
 	local self = setmetatable({}, Rng)
 	self.state = Rng.hash(table.concat(parts, "|"))
+	-- similar seeds start out with almost the same value; a few steps separate them
+	for _ = 1, 4 do self:next() end
 	return self
 end
 

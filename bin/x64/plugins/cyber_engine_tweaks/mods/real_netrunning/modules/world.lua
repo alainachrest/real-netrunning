@@ -36,6 +36,24 @@ function World.giveMoney(amount)
 	end)
 end
 
+function World.getMoney()
+	local amount = try(function()
+		return Game.GetTransactionSystem():GetItemQuantity(Game.GetPlayer(), MarketSystem.Money())
+	end)
+	return type(amount) == "number" and amount or 0
+end
+
+-- Takes eddies from V. Returns true only if V had enough and they were removed.
+function World.spendMoney(amount)
+	amount = math.floor(amount)
+	if amount <= 0 then return true end
+	if World.getMoney() < amount then return false end
+	local ok = try(function()
+		return Game.GetTransactionSystem():RemoveItemByTDBID(Game.GetPlayer(), TweakDBID.new("Items.money"), amount)
+	end)
+	return ok == true
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

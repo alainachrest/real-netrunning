@@ -3,6 +3,7 @@
 local Network = require("modules/network")
 local Lore = require("modules/lore")
 local World = require("modules/world")
+local Market = require("modules/market")
 
 local Shell = {
 	lines = {},        -- { text, kind } kind = "out" | "cmd" | "ok" | "warn" | "err"
@@ -189,8 +190,62 @@ def("download", "download <file>", "Download paydata to sell.", function(args)
 	World.giveMoney(node.paydata)
 	out("Paydata fenced through your contacts: +" .. node.paydata .. " eddies.", "ok")
 	World.notify("Paydata sold: " .. node.paydata .. " eddies")
-	emit("hack.download", { addr = net.addr, org = net.org, value = node.paydata, tier = net.tier })
+	local event = { addr = net.addr, org = net.org, value = node.paydata, tier = net.tier }
+	emit("hack.download", event)
+	local tip = Market.onDownload(event)
+	if tip then out(tip, "warn") end
 	if net.ice >= 3 then addTrace(10) end
+end)
+
+def("leak", "leak <file>", "Leak paydata to the press (crashes the owner's stock).", function(args)
+	local net = needAccess() if not net then return end
+	if not args[1] then out("Usage: leak <file>", "err") return end
+	local node, path = Network.resolve(net, Shell.cwd, args[1])
+	if node == nil or node.dir then out("No such file.", "err") return end
+	if not node.paydata then out("Nothing in that file the press would care about.") return end
+	local key = net.addr .. ":" .. path
+	if Network.state.looted[key] then out("That data is already out.") return end
+	local company = Market.onLeak(net.org, net.tier)
+	if company == nil then out("No listed company would be hurt by this leak.") return end
+	Network.state.looted[key] = true
+	local fee = math.floor(node.paydata / 2)
+	World.giveMoney(fee)
+	out("Leaked to the press. " .. company.name .. " (" .. company.ticker .. ") will take a hit. Journalist paid " .. fee .. " eddies.", "ok")
+	Network.addHeat(5, "leak from " .. net.addr)
+	emit("hack.leak", { addr = net.addr, org = net.org, ticker = company.ticker, tier = net.tier })
+	addTrace(10)
+end)
+
+local function money(n) return string.format("%.2f", n) end
+
+def("market", "market", "Night City stock prices.", function()
+	for _, c in ipairs(Market.companies) do
+		local change = Market.change(c.ticker) * 100
+		out(string.format("  %-4s %-22s %10s  %+6.1f%%", c.ticker, c.name, money(Market.price(c.ticker)), change),
+			change > 0.05 and "ok" or (change < -0.05 and "err" or "out"))
+	end
+	out("Trade with: buy <ticker> <qty>, sell <ticker> <qty|all>. 1% fee per trade.")
+end)
+
+def("buy", "buy <ticker> <qty>", "Buy shares.", function(args)
+	local ok, msg = Market.buy(args[1] or "", args[2] or "")
+	out(msg, ok and "ok" or "err")
+end)
+
+def("sell", "sell <ticker> <qty|all>", "Sell shares.", function(args)
+	local ok, msg = Market.sell(args[1] or "", args[2] or "")
+	out(msg, ok and "ok" or "err")
+end)
+
+def("portfolio", "portfolio", "Your shares and their value.", function()
+	local rows, value = Market.portfolio()
+	if #rows == 0 then out("You don't own any shares.") return end
+	for _, r in ipairs(rows) do
+		local gain = (r.price - r.cost) * r.qty
+		out(string.format("  %-4s x%-6d now %10s   paid %10s   %+.0f", r.ticker, r.qty, money(r.price), money(r.cost), gain),
+			gain >= 0 and "ok" or "err")
+	end
+	out("Total value: " .. math.floor(value) .. " eddies")
 end)
 
 def("jack", "jack", "Jack into the device you're looking at.", function()

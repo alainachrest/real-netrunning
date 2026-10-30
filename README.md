@@ -30,6 +30,8 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - **Windows**: drag them by the title bar, minimise with `[ _ ]`, close with `[ X ]`, click one to bring it to the front, or use its taskbar button. Several can be open at once.
 - **Files**: the computer's own mail and documents in folders, plus a `System` folder of files generated for that machine. Encrypted documents and system files stay locked until you breach the computer. Click a document to open it in its own window.
 - **Save to Home**: documents you open on other computers can be saved to V's own computers, where they appear under `Home/Saved`. They're kept per save.
+- **Browser**: the Night City net. A portal, a directory of every network you know, the newsfeed, corporate sites (with their internal files once breached), CyberScript datapack pages, and the stock exchange. Back, Home and Reload buttons; click any `>` line to follow it.
+- **Exchange**: opens the browser on the Night City Stock Exchange, where you can buy and sell with real eddies.
 - **Terminal**: the cyberdeck shell, already connected to that computer. Type `breach` to unlock its files.
 - **Cyberdeck**: opens the full deck popup connected to that computer.
 
@@ -40,7 +42,11 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `connect <address>` | Connect to a network |
 | `breach` | Break the ICE on the current network (raises trace) |
 | `ls`, `cd`, `cat` | Browse and read files once you have access |
-| `download <file>` | Sell paydata for eddies |
+| `download <file>` | Sell paydata for eddies (corporate data may carry an insider tip) |
+| `leak <file>` | Leak paydata to the press: the owner's stock crashes, the journalist pays a little |
+| `market` | Stock prices |
+| `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
+| `portfolio` | Your shares and their value |
 | `jack` | Jack into the door, camera, turret, computer or access point you're looking at |
 | `device <action>` | Control a jacked device (doors: open, close, lock, unlock; cameras and turrets: on, off) |
 | `status` | Deck power, trace and NetWatch heat |
@@ -51,6 +57,14 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.
+
+## Stock exchange
+
+Thirteen lore companies are listed, from Arasaka (ARA) and Militech (MIL) to Delamain (DLM). Prices move every 30 seconds of play, and every save has its own market.
+
+- Breaching a company's networks nudges its price down; leaking its data crashes it, and its rivals gain a little.
+- Corporate paydata sometimes carries an insider tip about news that hasn't broken yet. Trade on it before it goes public, but trading a tipped stock raises your NetWatch heat.
+- CyberScript faction scores for corporations move their stock too.
 
 ## CyberScript bridge
 
