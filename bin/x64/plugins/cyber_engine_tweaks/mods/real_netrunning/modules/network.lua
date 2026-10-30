@@ -54,12 +54,21 @@ function Network.register(def)
 		tier = def.tier or 1,
 		ice = clampIce(ice),
 		hub = def.hub == true,
-		reveals = def.reveals or {},
+		reveals = { unpack(def.reveals or {}) }, -- a copy: build() adds to the hub's list
 		kind = def.kind or "lore",
 		device = def.device,
 		devices = def.devices,       -- access point networks: the real devices wired to it
 		site = def.site,
 		extraFiles = def.files,
+		region = Lore.regions[def.region or "nc"] and (def.region or "nc") or "nc",
+		uplink = def.uplink,         -- owning this network gives reach into that region
+		tone = def.tone,             -- overrides for generated content
+		users = def.users,
+		paydata = def.paydata,
+		tagline = def.tagline,
+		about = def.about,
+		district = def.district,
+		junk = def.junk,
 		fs = nil,     -- built on first use
 		floors = nil, -- built on first use
 	}
@@ -88,9 +97,58 @@ function Network.build()
 	for _, def in ipairs(Lore.networks) do
 		if def.known then Network.state.known[def.addr] = true end
 	end
+	-- junk networks, the same for every load of this save
+	local junk = Lore.junkNetworks(Rng.new(Network.state.seed or 0, "junk"), Network.junkCount)
+	local hub, seen = Network.nets["nc.subnet.public"], {}
+	for _, def in ipairs(junk) do
+		Network.register(def)
+		-- the public subnet leads to one junk network in each district
+		if hub and not seen[def.district] then
+			seen[def.district] = true
+			table.insert(hub.reveals, def.addr)
+		end
+	end
 	for _, def in pairs(Network.external) do
 		Network.register(def)
 	end
+	-- networks owned in older versions reveal routes added since
+	for addr in pairs(Network.state.owned) do
+		local net = Network.nets[addr]
+		if net then for _, r in ipairs(net.reveals) do Network.state.known[r] = true end end
+	end
+end
+
+Network.junkCount = 48
+
+---------------------------------------------------------------------------
+-- Reach: off-world regions need an uplink
+---------------------------------------------------------------------------
+
+function Network.hasUplink(region)
+	if region == nil or region == "nc" then return true end
+	for addr in pairs(Network.state.owned) do
+		local net = Network.nets[addr]
+		if net and net.uplink == region then return true end
+	end
+	return false
+end
+
+function Network.canReach(net)
+	return Network.hasUplink(net.region)
+end
+
+-- The networks that would give an uplink to a region.
+function Network.uplinksFor(region)
+	local list = {}
+	for _, addr in ipairs(Network.order) do
+		local net = Network.nets[addr]
+		if net.uplink == region then table.insert(list, net) end
+	end
+	return list
+end
+
+function Network.lag(net)
+	return Lore.region(net.region).lag
 end
 
 -- For other mods: remembered across save loads, unlike runtime-only networks.
@@ -310,7 +368,7 @@ local function buildFs(net)
 	local floors = Network.floors(net)
 
 	local users = {}
-	for _, u in ipairs(org.users) do
+	for _, u in ipairs(net.users or org.users) do
 		if rng:chance(0.7) or #users == 0 then table.insert(users, u) end
 	end
 
@@ -328,6 +386,7 @@ local function buildFs(net)
 		end
 	end
 
+	local paydataRange = net.paydata or org.paydata
 	local paydataPlaced = false
 	for i, f in ipairs(floors) do
 		local dir = Network.floorFolder(i, f)
@@ -336,7 +395,7 @@ local function buildFs(net)
 			if net.kind == "site" and net.site then
 				addFile(root, dir .. "/index.page", { text = net.site.text or net.name })
 			else
-				addFile(root, dir .. "/welcome.txt", { text = net.name .. "\nOperator: " .. org.name ..
+				addFile(root, dir .. "/welcome.txt", { text = net.name .. "\nOperator: " .. (net.junk and "Private" or org.name) ..
 					"\nAddress: " .. net.addr .. "\nArchitecture: " .. #floors .. " floors" ..
 					"\n\nUnauthorised access is a violation of NetWatch regulations." })
 			end
@@ -359,7 +418,7 @@ local function buildFs(net)
 				table.insert(lines, string.format("[%02d:%02d] %s", rng:int(0, 23), rng:int(0, 59), line))
 			end
 			addFile(root, dir .. "/logs/access.log", { text = table.concat(lines, "\n") })
-			local mails = Lore.mail[org.tone] or Lore.mail.device
+			local mails = Lore.mail[net.tone or org.tone] or Lore.mail.device
 			for _ = 1, rng:int(1, 3) do
 				local from, to = rng:pick(users), rng:pick(users)
 				addFile(root, string.format("%s/home/%s/mail/%03d.msg", dir, to, rng:int(1, 999)),
@@ -371,8 +430,8 @@ local function buildFs(net)
 					{ text = "From: secops\nTo: " .. who .. "\n\nTemporary access code for floor " .. hint.floor ..
 						": " .. hint.code .. "\nDelete this message after reading." })
 			end
-			if org.paydata[2] > 0 and (not paydataPlaced or rng:chance(0.5)) then
-				local value = rng:int(org.paydata[1], org.paydata[2]) * net.tier
+			if paydataRange[2] > 0 and (not paydataPlaced or rng:chance(0.5)) then
+				local value = rng:int(paydataRange[1], paydataRange[2]) * net.tier
 				addFile(root, string.format("%s/data/paydata_%04x.dat", dir, rng:int(0, 65535)),
 					{ text = "[encrypted corporate data]", paydata = value })
 				paydataPlaced = true
@@ -386,8 +445,8 @@ local function buildFs(net)
 
 		elseif f.kind == "core" then
 			addFile(root, dir .. "/root.key", { text = "ROOT ACCESS GRANTED." })
-			if org.paydata[2] > 0 then
-				local value = rng:int(org.paydata[1], org.paydata[2]) * net.tier * 2
+			if paydataRange[2] > 0 then
+				local value = rng:int(paydataRange[1], paydataRange[2]) * net.tier * 2
 				addFile(root, string.format("%s/vault/paydata_%04x.dat", dir, rng:int(0, 65535)),
 					{ text = "[encrypted core data]", paydata = value })
 			end

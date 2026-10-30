@@ -19,15 +19,15 @@ Market.companies = {
 	{ ticker = "MIL", name = "Militech",            org = "militech",   price = 640, vol = 0.014, rivals = { "ARA" } },
 	{ ticker = "KTC", name = "Kang Tao",            org = "kangtao",    price = 410, vol = 0.020, rivals = { "ARA" } },
 	{ ticker = "TTI", name = "Trauma Team Int.",    org = "traumateam", price = 330, vol = 0.010 },
-	{ ticker = "BTC", name = "Biotechnica",         price = 300, vol = 0.016 },
-	{ ticker = "PTC", name = "Petrochem",           price = 260, vol = 0.015, rivals = { "SOV" } },
-	{ ticker = "SOV", name = "SovOil",              price = 240, vol = 0.018, rivals = { "PTC" } },
-	{ ticker = "ORB", name = "Orbital Air",         price = 390, vol = 0.013 },
-	{ ticker = "KIR", name = "Kiroshi Opticals",    price = 180, vol = 0.022 },
-	{ ticker = "ZTC", name = "Zetatech",            price = 150, vol = 0.024 },
+	{ ticker = "BTC", name = "Biotechnica",         org = "biotechnica", price = 300, vol = 0.016 },
+	{ ticker = "PTC", name = "Petrochem",           org = "petrochem", price = 260, vol = 0.015, rivals = { "SOV" } },
+	{ ticker = "SOV", name = "SovOil",              org = "sovoil", price = 240, vol = 0.018, rivals = { "PTC" } },
+	{ ticker = "ORB", name = "Orbital Air",         org = "orbitalair", price = 390, vol = 0.013 },
+	{ ticker = "KIR", name = "Kiroshi Opticals",    org = "kiroshi", price = 180, vol = 0.022 },
+	{ ticker = "ZTC", name = "Zetatech",            org = "zetatech", price = 150, vol = 0.024 },
 	{ ticker = "N54", name = "Network 54",          org = "network54",  price = 140, vol = 0.020, rivals = { "WNS" } },
-	{ ticker = "WNS", name = "World News Service",  price = 110, vol = 0.020, rivals = { "N54" } },
-	{ ticker = "DLM", name = "Delamain",            price = 90,  vol = 0.025 },
+	{ ticker = "WNS", name = "World News Service",  org = "wns", price = 110, vol = 0.020, rivals = { "N54" } },
+	{ ticker = "DLM", name = "Delamain",            org = "delamain", price = 90,  vol = 0.025 },
 }
 
 local byTicker, byOrg = {}, {}

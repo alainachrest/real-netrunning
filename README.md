@@ -38,7 +38,8 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | Command | What it does |
 | --- | --- |
 | `help` | List commands |
-| `scan` | List networks your deck can reach |
+| `scan [filter]` | List networks you know, grouped by region. Filter with a region (`nc`, `nusa`, `pacific`, `eu`, `orbit`), `local` for small nets, `corp`, or any word |
+| `uplinks` | Which regions beyond Night City you can reach, and what to root to reach the rest |
 | `connect <address>` | Connect to a network |
 | `map` | Show the network's floors and what blocks each one |
 | `breach` | Break the ICE on the next locked floor (raises trace) |
@@ -61,11 +62,34 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
 - Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
-- Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually Arasaka in Tokyo.
+- Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually headquarters around the world and in orbit.
 - Progress through each network's floors is saved, so you can come back and carry on.
 - Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.
+
+## Beyond Night City
+
+Networks outside Night City need an uplink: get root on a network that routes to that region, and every network there becomes reachable.
+
+| Region | Uplink | What's there |
+| --- | --- | --- |
+| New United States | Militech NUSA backbone relay | Militech HQ (Washington), Petrochem HQ (Dallas), Zetatech, World News Service |
+| Pacific Rim | Arasaka trans-Pacific backbone or Kang Tao Pacific backbone | Arasaka HQ (Tokyo), Kang Tao HQ, Kiroshi Opticals |
+| EuroTheater | Biotechnica transatlantic relay | Biotechnica HQ (Italy), SovOil HQ (Moscow) |
+| Orbit | Orbital Air Night City launch control | Orbital Air traffic control, Crystal Palace, Arasaka's orbital station |
+
+- The further away a network is, the more lag: breaches and cracks there raise trace faster (x1.25 up to x1.8 in orbit). `scan` and each site show the lag.
+- Headquarters are the deepest networks in the game and carry the most valuable paydata.
+- Night City also has new corporate networks: Delamain, Biotechnica Flats, Petrochem's Badlands oil fields and Orbital Air's launch control. Every listed company now has networks, so hacking any of them moves its stock.
+
+## Local networks
+
+Each save also has 48 small networks scattered across Night City's districts: noodle bars, pawn shops, karaoke clubs, ripperdoc clinics, BD parlours, megabuilding meshes, NCART stations, vending machines, freelance netrunners' rigs and dead nodes nobody switched off. They're generated from the save, so they stay the same every time you load it.
+
+- The public subnet leads to one in each district. Each one you own points to a couple more.
+- They're easy and pay little, but ripperdocs, BD parlours and netrunners' rigs are worth more, and the odd dead node still has something inside.
+- `scan local` lists only these.
 
 ## NetWatch
 

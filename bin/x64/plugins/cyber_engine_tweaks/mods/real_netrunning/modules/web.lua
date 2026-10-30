@@ -58,6 +58,26 @@ local sites = {
 		about = "Family first. Respect the neighbourhood." },
 	sixthstreet = { color = YELLOW, tagline = "Santo Domingo neighbourhood watch",
 		about = "Patriots welcome. Outsiders, keep moving." },
+	biotechnica = { color = GREEN,  tagline = "Feeding the world. Healing the world.",
+		about = "Biotechnica engineers the crops, livestock and medicines the world runs on. Our Night City operation farms the Biotechnica Flats." },
+	petrochem   = { color = YELLOW, tagline = "Fuel for the future.",
+		about = "Petrochem produces CHOOH2 and agricultural products across the NUSA. Our Badlands fields keep Night City moving." },
+	sovoil      = { color = RED,    tagline = "Energy without borders.",
+		about = "SovOil supplies fuel and petrochemicals to Eurasia and beyond, from Moscow to the Pacific." },
+	orbitalair  = { color = BLUE,   tagline = "Your gateway to the stars.",
+		about = "Orbital Air flies passengers and cargo between Earth and orbit. Book your seat on the next suborbital from Night City." },
+	kiroshi     = { color = BLUE,   tagline = "See more.",
+		about = "Kiroshi Opticals makes the cybernetic eyes trusted by half the world. Firmware updates are mandatory." },
+	zetatech    = { color = GREEN,  tagline = "Thinking ahead.",
+		about = "Zetatech builds computers, cyberdecks and the software that runs them." },
+	wns         = { color = BLUE,   tagline = "The world, on the wire.",
+		about = "World News Service. Bureaus in every major city, stringers everywhere else." },
+	delamain    = { color = YELLOW, tagline = "Your journey. Our pleasure.",
+		about = "Delamain Corporation: Night City's premier autonomous cab service. Every car, a gentleman." },
+	esa         = { color = BLUE,   tagline = "Crystal Palace: humanity's home in orbit.",
+		about = "The European Space Agency's Crystal Palace is the largest habitat in orbit. Visitor permits are issued by ESA only." },
+	civilian    = { color = BLUE,   tagline = "Private network",
+		about = "A small private network." },
 	unregistered = { color = BLUE,  tagline = "Unregistered host",
 		about = "No public page." },
 }
@@ -157,12 +177,22 @@ local function directory()
 	local p = page("Directory", "nc://directory", BLUE)
 	p:banner("DIRECTORY", "Every network your deck can reach", BLUE)
 	p:portalNav()
-	p:row({ "ACCESS", "NETWORK", "OPERATOR", "ADDRESS" }, "", YELLOW)
-	for _, net in ipairs(Network.knownList()) do
-		local org = Lore.getOrg(net.org)
-		local owned = Network.isOwned(net.addr)
-		p:row({ owned and "ROOT" or ("ICE " .. net.ice), net.name, org.name, net.addr }, "net://" .. net.addr,
-			owned and GREEN or (net.ice >= 4 and RED or BLUE))
+	for _, region in ipairs(Lore.regionOrder) do
+		local rows = {}
+		for _, net in ipairs(Network.knownList()) do
+			if net.region == region then table.insert(rows, net) end
+		end
+		if #rows > 0 then
+			local reach = Network.hasUplink(region)
+			p:heading(Lore.region(region).name .. (reach and "" or "  -  NO UPLINK"), reach and nil or RED)
+			p:row({ "ACCESS", "NETWORK", "OPERATOR", "ADDRESS" }, "", YELLOW)
+			for _, net in ipairs(rows) do
+				local org = Lore.getOrg(net.org)
+				local owned = Network.isOwned(net.addr)
+				p:row({ owned and "ROOT" or ("ICE " .. net.ice), net.name, net.junk and "Private" or org.name, net.addr }, "net://" .. net.addr,
+					owned and GREEN or ((not reach or net.ice >= 4) and RED or BLUE))
+			end
+		end
 	end
 	p:divider()
 	p:text("Breach networks with the Terminal to find more routes.", YELLOW)
@@ -273,15 +303,23 @@ local function netPage(addr)
 		return p
 	end
 
-	p:banner(org.name:upper(), site.tagline, site.color)
+	local operator = net.junk and net.name or org.name
+	p:banner(operator:upper(), net.tagline or site.tagline, site.color)
 	p:nav("About", "net://" .. addr)
 	local company = Market.forOrg(net.org)
 	if company then p:nav("Investors", "market://" .. company.ticker) end
 	p:nav("Portal", "nc://home")
 	p:heading(net.name, site.color)
-	p:text(site.about)
+	p:text(net.about or site.about)
 	p:field("Address", addr)
-	p:field("Operator", org.name)
+	p:field("Operator", net.junk and "Private" or org.name)
+	p:field("Region", Lore.region(net.region).name .. (net.region ~= "nc" and ("  (lag x" .. Network.lag(net) .. ")") or ""))
+	if net.uplink then
+		p:field("Routes to", Lore.region(net.uplink).name, Network.isOwned(addr) and GREEN or YELLOW)
+	end
+	if not Network.canReach(net) then
+		p:notice("No uplink to " .. Lore.region(net.region).name .. ". Root a backbone that routes there to reach this network.", RED)
+	end
 	p:field("Security", Network.isOwned(addr) and "ROOT ACCESS" or ("ICE level " .. net.ice),
 		Network.isOwned(addr) and GREEN or RED)
 

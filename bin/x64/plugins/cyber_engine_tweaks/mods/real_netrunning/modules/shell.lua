@@ -116,14 +116,56 @@ def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
 	end
 end)
 
-def("scan", "scan", "List networks your deck can reach.", function()
-	local list = Network.knownList()
-	if #list == 0 then out("No networks in range.") return end
-	for _, net in ipairs(list) do
-		local org = Lore.getOrg(net.org)
-		out(string.format("  %-34s ICE %d  %-6s %s", net.addr, net.ice, progress(net), net.name .. " [" .. org.name .. "]"),
-			Network.isOwned(net.addr) and "ok" or "out")
+def("scan", "scan [region or word]", "List networks you know. Filter by region (nc, nusa, pacific, eu, orbit), 'local' for small nets, or any word.", function(args)
+	local filter = args[1] and args[1]:lower()
+	local shown = 0
+	for _, region in ipairs(Lore.regionOrder) do
+		local rows = {}
+		for _, net in ipairs(Network.knownList()) do
+			if net.region == region then
+				local org = Lore.getOrg(net.org)
+				local match = filter == nil or filter == region
+					or (filter == "local" and net.junk ~= nil)
+					or (filter == "corp" and net.junk == nil)
+					or net.addr:lower():find(filter, 1, true) or net.name:lower():find(filter, 1, true)
+					or org.name:lower():find(filter, 1, true)
+				if match then table.insert(rows, net) end
+			end
+		end
+		if #rows > 0 then
+			local reach = Network.hasUplink(region)
+			local r = Lore.region(region)
+			out(r.name:upper() .. (region == "nc" and "" or (reach and ("  (uplink ok, lag x" .. r.lag .. ")") or "  (NO UPLINK)")),
+				reach and "warn" or "err")
+			for _, net in ipairs(rows) do
+				local org = Lore.getOrg(net.org)
+				local label = net.name .. (net.junk and "" or (" [" .. org.name .. "]"))
+				if net.uplink and not Network.isOwned(net.addr) then label = label .. "  <- uplink to " .. Lore.region(net.uplink).name end
+				out(string.format("  %-34s ICE %d  %-6s %s", net.addr, net.ice, progress(net), label),
+					Network.isOwned(net.addr) and "ok" or (reach and "out" or "err"))
+				shown = shown + 1
+			end
+		end
 	end
+	if shown == 0 then out(filter and "Nothing matches." or "No networks in range.") end
+end)
+
+def("uplinks", "uplinks", "Which regions beyond Night City your deck can reach.", function()
+	for _, region in ipairs(Lore.regionOrder) do
+		if region ~= "nc" then
+			local r = Lore.region(region)
+			if Network.hasUplink(region) then
+				out(string.format("  %-18s ONLINE   lag x%.2f", r.name, r.lag), "ok")
+			else
+				local via = {}
+				for _, net in ipairs(Network.uplinksFor(region)) do
+					table.insert(via, Network.isKnown(net.addr) and net.addr or "an unknown relay")
+				end
+				out(string.format("  %-18s OFFLINE  root %s to reach it", r.name, table.concat(via, " or ")), "err")
+			end
+		end
+	end
+	out("Off-world breaches raise trace faster: the signal takes longer to get there and back.")
 end)
 
 def("connect", "connect <address>", "Connect to a network from scan.", function(args)
@@ -131,11 +173,16 @@ def("connect", "connect <address>", "Connect to a network from scan.", function(
 	if not addr then out("Usage: connect <address>", "err") return end
 	local net = Network.get(addr)
 	if net == nil or not Network.isKnown(addr) then out("No route to " .. addr .. ". Try scan.", "err") return end
+	if not Network.canReach(net) then
+		out("No uplink to " .. Lore.region(net.region).name .. ". Get root on a backbone that routes there. Type 'uplinks'.", "err")
+		return
+	end
 	if Shell.connected then disconnect("switched") end
 	local floors = Network.floors(net)
 	Shell.connected, Shell.trace = addr, 0
 	Shell.cwd = "/" .. Network.floorFolder(1, floors[1])
-	out("Connected to " .. net.name .. ". " .. #floors .. " floors.", "ok")
+	out("Connected to " .. net.name .. ". " .. #floors .. " floors." ..
+		(net.region ~= "nc" and (" Routing via " .. Lore.region(net.region).name .. ", lag x" .. Network.lag(net) .. ".") or ""), "ok")
 	-- networks with no locks at all open up straight away
 	if Network.nextLock(addr) == nil and not Network.isOwned(addr) then
 		Network.markOwned(addr)
@@ -171,7 +218,7 @@ local function startJob(kind, net, index, f, duration, traceTotal)
 	local power = World.deckPower()
 	Shell.job = {
 		kind = kind, addr = net.addr, floor = index, elapsed = 0, duration = duration, power = power,
-		traceTotal = traceTotal, traced = 0,
+		traceTotal = traceTotal * Network.lag(net), traced = 0,
 	}
 	return power
 end
