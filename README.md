@@ -77,7 +77,7 @@ Connect to a network and type `jackin`: V's body stays where it is, and V walks 
 
 Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
 
-- Every floor of the network is a small complex of 16 m rooms (2 x 2 up to 3 x 3), with walls and doorways, stacked downwards. You arrive in one room; the way down is in the room furthest away, and data objects are spread through the rooms in between. Layouts are generated from your save, so each network's floors are the same every visit.
+- Every floor of the network is a small complex of 16 m rooms (2 x 2 up to 3 x 3), with walls, doorways and ceilings, stacked downwards. You arrive in one room; the way down is in the room furthest away, and data objects are spread through the rooms in between. Layouts are generated from your save, so each network's floors are the same every visit.
 - While the floor below is locked, the doorway into the room with the way down is sealed by a barrier you can't walk through.
 - **ICE** stands guard at the sealed doorway as the owner's own netrunners: gang netrunners on gang nets, corporate security on corp nets, Voodoo Boys-grade elites for Black ICE. Take them down and the next floor opens. Fighting ICE raises your trace. You can still `breach` from the deck instead: use the gate, or type it.
 - **Data objects** on each floor are its files. Use one to download paydata, or to read it in the deck.

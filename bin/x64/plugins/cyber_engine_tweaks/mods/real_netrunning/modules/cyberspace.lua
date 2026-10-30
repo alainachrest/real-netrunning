@@ -250,6 +250,8 @@ local function buildFloor(net, i, f, count)
 		for y = 0, L.h - 1 do
 			local rx, ry = cellCentre(i, L, x, y)
 			block(floor, { x = rx, y = ry, z = cz - 0.5, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.5, kind = 0 })
+			-- a ceiling on top of the walls, so nothing outside cyberspace shows
+			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight + 0.25, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.25, kind = 2 })
 			if x == 0 then wall(floor, "y", rx - r / 2, ry, cz, false) end
 			if y == 0 then wall(floor, "x", rx, ry - r / 2, cz, false) end
 			wall(floor, "y", rx + r / 2, ry, cz, x < L.w - 1 and L.doors[L.key(x, y, x + 1, y)])

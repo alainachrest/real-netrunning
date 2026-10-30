@@ -113,6 +113,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // kind 0: floor slab (its mesh's top is the top of the box)
     // kind 1: wall or door barrier (its mesh fills the box)
+    // kind 2: ceiling (the floor mesh upside down, its face on the underside of the box)
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
         let rotation: EulerAngles;
@@ -211,14 +212,21 @@ public class RNCyberspaceSystem extends ScriptableSystem {
                 offsetZ = size.Z;
             }
         }
-        if kind == 0 {
+        if kind != 1 {
             sx = sx * this.m_scale;
             sy = sy * this.m_scale;
         }
         visual.visualScale = Vector3(sx, sy, sz);
         let place: WorldTransform;
-        WorldTransform.SetPosition(place, Vector4(-cx * sx, -cy * sy, offsetZ - cz * sz, 1.0));
-        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        if kind == 2 {
+            // turned over (180 degrees about X: y and z flip), so the face that is
+            // the floor's top looks down from the underside of the box
+            WorldTransform.SetPosition(place, Vector4(-cx * sx, cy * sy, cz * sz - size.Z, 1.0));
+            WorldTransform.SetOrientation(place, Quaternion(1.0, 0.0, 0.0, 0.0));
+        } else {
+            WorldTransform.SetPosition(place, Vector4(-cx * sx, -cy * sy, offsetZ - cz * sz, 1.0));
+            WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        }
         visual.localTransform = place;
         visual.isEnabled = true;
         template.AddComponent(visual);
