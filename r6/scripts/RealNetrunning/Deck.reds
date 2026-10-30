@@ -43,6 +43,13 @@ public class DeckService extends ScriptableService {
     private let m_machineKeys: array<String>;
     private let m_machineAddrs: array<String>;
 
+    // V's home computers: saved documents, kept per save by Lua
+    private let m_saveNames: array<String>;
+    private let m_saveTexts: array<String>;
+    private let m_homeNames: array<String>;
+    private let m_homeTexts: array<String>;
+    private let m_heat: Int32;
+
     // Fixed limits, and defaults that don't rely on a start-up callback.
     private let m_traceSet: Bool;
 
@@ -252,6 +259,71 @@ public class DeckService extends ScriptableService {
         }
         return "";
     }
+
+    // --- tray --------------------------------------------------------------------
+
+    public func SetHeat(heat: Int32) {
+        this.m_heat = heat;
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                terminal.OnTrayChanged();
+            }
+        }
+    }
+
+    public func GetHeat() -> Int32 { return this.m_heat; }
+
+    // --- saving documents to V's home computers -------------------------------------
+
+    public func RequestSaveToHome(name: String, text: String) {
+        ArrayPush(this.m_saveNames, name);
+        ArrayPush(this.m_saveTexts, text);
+    }
+
+    public func HasSaveRequest() -> Bool {
+        return ArraySize(this.m_saveNames) > 0;
+    }
+
+    // Lua calls TakeSaveName then TakeSaveText for each request.
+    public func TakeSaveName() -> String {
+        if ArraySize(this.m_saveNames) == 0 {
+            return "";
+        }
+        let name = this.m_saveNames[0];
+        ArrayErase(this.m_saveNames, 0);
+        return name;
+    }
+
+    public func TakeSaveText() -> String {
+        if ArraySize(this.m_saveTexts) == 0 {
+            return "";
+        }
+        let text = this.m_saveTexts[0];
+        ArrayErase(this.m_saveTexts, 0);
+        return text;
+    }
+
+    public func ClearHomeFiles() {
+        ArrayClear(this.m_homeNames);
+        ArrayClear(this.m_homeTexts);
+    }
+
+    public func AddHomeFile(name: String, text: String) {
+        ArrayPush(this.m_homeNames, name);
+        ArrayPush(this.m_homeTexts, text);
+    }
+
+    public func HomeFilesReady() {
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                terminal.OnHomeChanged();
+            }
+        }
+    }
+
+    public func GetHomeFileCount() -> Int32 { return ArraySize(this.m_homeNames); }
+    public func GetHomeFileName(index: Int32) -> String { return this.m_homeNames[index]; }
+    public func GetHomeFileText(index: Int32) -> String { return this.m_homeTexts[index]; }
 
     public func GetMachineFiles(key: String) -> array<ref<RNFileEntry>> {
         let result: array<ref<RNFileEntry>>;

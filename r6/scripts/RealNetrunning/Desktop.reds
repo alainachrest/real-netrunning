@@ -3,14 +3,17 @@
 // -----------------------------------------------------------------------------
 //
 // Adds a DESKTOP button to every in-game computer screen. It switches into a
-// simulated OS drawn over the vanilla screen, which stays underneath untouched:
+// simulated OS drawn over the vanilla screen, which stays underneath untouched.
 //
-//   Files     - the computer's own mail and documents, plus the system files
-//               Real Netrunning generates for it (locked until breached)
-//   Terminal  - the cyberdeck shell, connected to this computer
-//   Deck      - opens the full cyberdeck popup
+//   Desktop   icon tiles, a taskbar with a start menu, a button per open window,
+//             and a tray with NetWatch heat and the clock
+//   Windows   draggable by the title bar, minimise and close, click to bring
+//             to front; several can be open at once
+//   Apps      Files (the computer's mail and documents, generated system files,
+//             and on V's own computers the files you saved), document viewer,
+//             Terminal (the deck shell, connected to this computer), Cyberdeck
 //
-// Generated files come from the Lua mod through DeckService (Deck.reds).
+// Generated and saved files come from the Lua mod through DeckService (Deck.reds).
 
 module RealNetrunning
 import Codeware.UI.*
@@ -49,6 +52,14 @@ func RNRect(name: CName, color: HDRColor) -> ref<inkRectangle> {
     return rect;
 }
 
+// A clickable text label.
+func RNButton(name: CName, label: String, size: Int32, color: CName) -> ref<inkText> {
+    let button = RNText(name, size, color);
+    button.SetText(label);
+    button.SetInteractive(true);
+    return button;
+}
+
 // Journal titles and contents can be localisation keys.
 func RNLocalize(text: String) -> String {
     if StrBeginsWith(text, "LocKey#") {
@@ -65,123 +76,230 @@ func RNSafeName(text: String) -> String {
     return name;
 }
 
-// --- the desktop --------------------------------------------------------------
+// The number at the end of a widget name like "task12" -> 12.
+func RNNameNumber(name: CName, prefix: String) -> Int32 {
+    return StringToInt(StrAfterFirst(NameToString(name), prefix), -1);
+}
 
-public class RNDesktop {
-    // which computer this is
-    private let m_controller: wref<ComputerInkGameController>;
-    private let m_key: String;
-    private let m_name: String;
+// --- a window -------------------------------------------------------------------
 
-    // everything shown in the file explorer: vanilla docs, then generated files
-    private let m_paths: array<String>;
-    private let m_texts: array<String>;
-    private let m_locked: array<Bool>;
-    private let m_vanillaCount: Int32;
+public class RNWindow {
+    public let m_id: Int32;
+    public let m_kind: Int32;          // 1 files, 2 document, 3 terminal
+    public let m_title: String;
+    public let m_minimized: Bool;
+    public let m_root: wref<inkCanvas>;
 
-    // widgets
-    private let m_desktop: wref<inkCanvas>;
-    private let m_window: wref<inkCanvas>;
-    private let m_windowTitle: wref<inkText>;
+    private let m_desktop: wref<RNDesktop>;
+    private let m_titleText: wref<inkText>;
     private let m_header: wref<inkText>;
     private let m_rows: array<wref<inkText>>;
-    private let m_footer: wref<inkText>;
     private let m_pager: wref<inkHorizontalPanel>;
-    private let m_clock: wref<inkText>;
+    private let m_footer: wref<inkText>;
+    private let m_save: wref<inkText>;
     private let m_inputRow: wref<inkHorizontalPanel>;
     private let m_prompt: wref<inkText>;
     private let m_input: ref<TextInput>;
 
-    // state
-    private let m_mode: Int32;          // 0 closed, 1 files, 2 document, 3 terminal
+    // files
     private let m_cwd: String;
     private let m_listNames: array<String>;
     private let m_listIsDir: array<Bool>;
-    private let m_listIndex: array<Int32>; // file index for files, -1 for folders
+    private let m_listIndex: array<Int32>;
     private let m_offset: Int32;
-    private let m_docIndex: Int32;
+
+    // document
+    public let m_docIndex: Int32;
     private let m_docPage: Int32;
-    private let m_terminalConnected: Bool;
 
     private func VisibleRows() -> Int32 { return 12; }
     private func PageChars() -> Int32 { return 900; }
 
-    public static func Create(controller: ref<ComputerInkGameController>, root: ref<inkCompoundWidget>,
-                              key: String, name: String, ps: ref<ComputerControllerPS>) -> ref<RNDesktop> {
-        let self = new RNDesktop();
-        self.m_controller = controller;
-        self.m_key = key;
-        self.m_name = RNLocalize(name);
+    public static func Create(desktop: ref<RNDesktop>, id: Int32, kind: Int32, title: String,
+                              layer: ref<inkCompoundWidget>, controller: ref<inkGameController>,
+                              x: Float, y: Float) -> ref<RNWindow> {
+        let self = new RNWindow();
+        self.m_desktop = desktop;
+        self.m_id = id;
+        self.m_kind = kind;
+        self.m_title = title;
         self.m_cwd = "";
-        self.LoadVanillaDocuments(ps);
-        self.Build(root, controller);
-
-        let service = DeckService.Get();
-        if IsDefined(service) {
-            service.RegisterTerminal(self);
-            service.RequestMachine(key, self.m_name);
-        }
+        self.Build(layer, controller, x, y);
         return self;
     }
 
-    // --- data -----------------------------------------------------------------
+    private func Build(layer: ref<inkCompoundWidget>, controller: ref<inkGameController>, x: Float, y: Float) {
+        let root = new inkCanvas();
+        root.SetName(StringToName("window" + IntToString(this.m_id)));
+        root.SetAnchor(inkEAnchor.TopLeft);
+        root.SetSize(1100.0, 640.0);
+        root.SetTranslation(x, y);
+        root.SetInteractive(true);
+        root.Reparent(layer);
+        root.RegisterToCallback(n"OnPress", this, n"OnWindowPress");
+        this.m_root = root;
 
-    private func LoadVanillaDocuments(ps: ref<ComputerControllerPS>) {
-        if !IsDefined(ps) {
+        RNRect(n"frame", RNColor(0.55, 0.12, 0.12, 0.9)).Reparent(root);
+        let inner = RNRect(n"bg", RNColor(0.03, 0.05, 0.08, 0.98));
+        inner.SetMargin(inkMargin(2.0, 2.0, 2.0, 2.0));
+        inner.Reparent(root);
+
+        // title bar: drag handle, title, minimise and close
+        let bar = new inkCanvas();
+        bar.SetName(n"titlebar");
+        bar.SetAnchor(inkEAnchor.TopFillHorizontaly);
+        bar.SetSize(100.0, 52.0);
+        bar.SetInteractive(true);
+        bar.Reparent(root);
+        bar.RegisterToCallback(n"OnPress", this, n"OnTitlePress");
+        let barBg = RNRect(n"bg", RNColor(0.14, 0.04, 0.05, 1.0));
+        barBg.SetMargin(inkMargin(2.0, 2.0, 2.0, 0.0));
+        barBg.Reparent(bar);
+
+        let titleText = RNText(n"title", 28, n"MainColors.Red");
+        titleText.SetMargin(inkMargin(18.0, 10.0, 0.0, 0.0));
+        titleText.SetText(this.m_title);
+        titleText.Reparent(bar);
+        this.m_titleText = titleText;
+
+        let buttons = new inkHorizontalPanel();
+        buttons.SetName(n"buttons");
+        buttons.SetAnchor(inkEAnchor.TopRight);
+        buttons.SetAnchorPoint(Vector2(1.0, 0.0));
+        buttons.SetMargin(inkMargin(0.0, 10.0, 18.0, 0.0));
+        buttons.Reparent(bar);
+        let minimize = RNButton(n"minimize", "[ _ ]   ", 28, n"MainColors.Blue");
+        minimize.Reparent(buttons);
+        minimize.RegisterToCallback(n"OnRelease", this, n"OnMinimize");
+        let close = RNButton(n"close", "[ X ]", 28, n"MainColors.Red");
+        close.Reparent(buttons);
+        close.RegisterToCallback(n"OnRelease", this, n"OnClose");
+
+        // body
+        let body = new inkVerticalPanel();
+        body.SetName(n"body");
+        body.SetMargin(inkMargin(22.0, 66.0, 22.0, 16.0));
+        body.Reparent(root);
+
+        let header = RNButton(n"header", " ", 24, n"MainColors.Yellow");
+        header.SetMargin(inkMargin(0.0, 0.0, 0.0, 8.0));
+        header.Reparent(body);
+        header.RegisterToCallback(n"OnRelease", this, n"OnHeader");
+        this.m_header = header;
+
+        let i = 0;
+        while i < this.VisibleRows() {
+            let row = RNButton(StringToName("row" + IntToString(i)), " ", 25, n"MainColors.Blue");
+            row.SetWrappingAtPosition(1040.0);
+            row.Reparent(body);
+            row.RegisterToCallback(n"OnRelease", this, n"OnRow");
+            ArrayPush(this.m_rows, row);
+            i += 1;
+        }
+
+        let pager = new inkHorizontalPanel();
+        pager.SetName(n"pager");
+        pager.SetMargin(inkMargin(0.0, 8.0, 0.0, 0.0));
+        pager.Reparent(body);
+        this.m_pager = pager;
+        let prevButton = RNButton(n"prev", "[ PREV ]   ", 24, n"MainColors.Yellow");
+        prevButton.Reparent(pager);
+        prevButton.RegisterToCallback(n"OnRelease", this, n"OnPrev");
+        let nextButton = RNButton(n"next", "[ NEXT ]   ", 24, n"MainColors.Yellow");
+        nextButton.Reparent(pager);
+        nextButton.RegisterToCallback(n"OnRelease", this, n"OnNext");
+        let footer = RNText(n"footer", 24, n"MainColors.Yellow");
+        footer.Reparent(pager);
+        this.m_footer = footer;
+        let save = RNButton(n"save", "      [ SAVE TO HOME ]", 24, n"MainColors.Green");
+        save.SetVisible(false);
+        save.Reparent(pager);
+        save.RegisterToCallback(n"OnRelease", this, n"OnSave");
+        this.m_save = save;
+
+        // terminal input line
+        let inputRow = new inkHorizontalPanel();
+        inputRow.SetName(n"inputRow");
+        inputRow.SetMargin(inkMargin(0.0, 8.0, 0.0, 0.0));
+        inputRow.SetVisible(this.m_kind == 3);
+        inputRow.Reparent(body);
+        this.m_inputRow = inputRow;
+        let prompt = RNText(n"prompt", 25, n"MainColors.Blue");
+        prompt.SetMargin(inkMargin(0.0, 14.0, 12.0, 0.0));
+        prompt.Reparent(inputRow);
+        this.m_prompt = prompt;
+        if this.m_kind == 3 {
+            this.m_input = TextInput.Create();
+            this.m_input.SetName(n"rn_command");
+            this.m_input.SetMaxLength(200);
+            this.m_input.SetWidth(820.0);
+            this.m_input.Reparent(inputRow, controller);
+            this.m_input.RegisterToCallback(n"OnInputKey", this, n"OnTerminalKey");
+        }
+    }
+
+    public func GetInputWidget() -> wref<inkWidget> {
+        if IsDefined(this.m_input) {
+            return this.m_input.GetRootWidget();
+        }
+        return null;
+    }
+
+    public func SetMinimized(minimized: Bool) {
+        this.m_minimized = minimized;
+        this.m_root.SetVisible(!minimized);
+    }
+
+    public func Destroy(layer: ref<inkCompoundWidget>) {
+        if IsDefined(this.m_root) {
+            layer.RemoveChild(this.m_root);
+        }
+    }
+
+    // --- drawing --------------------------------------------------------------
+
+    private func SetRow(i: Int32, text: String, color: CName) {
+        let row = this.m_rows[i];
+        row.SetText(StrLen(text) > 0 ? text : " ");
+        row.BindProperty(n"tintColor", color);
+    }
+
+    private func ClearRowsFrom(first: Int32) {
+        let i = first;
+        while i < this.VisibleRows() {
+            this.SetRow(i, "", n"MainColors.Blue");
+            i += 1;
+        }
+    }
+
+    public func Draw() {
+        let desktop = this.m_desktop;
+        if !IsDefined(desktop) || !IsDefined(this.m_root) {
             return;
         }
-        for thumb in ps.GetMailThumbnailWidgets() {
-            let doc = ps.GetMailWidget(thumb.documentAdress);
-            this.AddDocument("Mail", thumb.folderName, doc);
-        }
-        for thumb in ps.GetFileThumbnailWidgets() {
-            let doc = ps.GetFileWidget(thumb.documentAdress);
-            this.AddDocument("Documents", thumb.folderName, doc);
-        }
-        this.m_vanillaCount = ArraySize(this.m_paths);
-    }
-
-    private func AddDocument(root: String, folder: String, doc: SDocumentWidgetPackage) {
-        let folderName = StrLen(folder) > 0 ? RNSafeName(folder) : "Inbox";
-        let path = root + "/" + folderName + "/" + RNSafeName(doc.title);
-        let body = "";
-        if StrLen(doc.owner) > 0 {
-            body = "From: " + RNLocalize(doc.owner) + "\n";
-        }
-        if StrLen(doc.date) > 0 {
-            body += RNLocalize(doc.date) + "\n";
-        }
-        body += "\n" + RNLocalize(doc.content);
-        ArrayPush(this.m_paths, path);
-        ArrayPush(this.m_texts, body);
-        ArrayPush(this.m_locked, doc.isEncrypted);
-    }
-
-    private func ReloadGeneratedFiles() {
-        ArrayResize(this.m_paths, this.m_vanillaCount);
-        ArrayResize(this.m_texts, this.m_vanillaCount);
-        ArrayResize(this.m_locked, this.m_vanillaCount);
-        let service = DeckService.Get();
-        if !IsDefined(service) {
-            return;
-        }
-        for entry in service.GetMachineFiles(this.m_key) {
-            ArrayPush(this.m_paths, "System" + entry.path);
-            ArrayPush(this.m_texts, entry.text);
-            ArrayPush(this.m_locked, entry.locked);
+        switch this.m_kind {
+            case 1: this.DrawFiles(desktop); break;
+            case 2: this.DrawDocument(desktop); break;
+            case 3: this.DrawTerminal(); break;
+            default: break;
         }
     }
 
-    // Lists the folders and files directly inside the current folder.
-    private func ListCurrentFolder() {
+    public func OpenFolder(path: String) {
+        this.m_cwd = path;
+        this.m_offset = 0;
+    }
+
+    private func ListCurrentFolder(desktop: ref<RNDesktop>) {
         ArrayClear(this.m_listNames);
         ArrayClear(this.m_listIsDir);
         ArrayClear(this.m_listIndex);
 
         let prefix = StrLen(this.m_cwd) > 0 ? this.m_cwd + "/" : "";
         let i = 0;
-        while i < ArraySize(this.m_paths) {
-            let path = this.m_paths[i];
+        let count = desktop.GetFileCount();
+        while i < count {
+            let path = desktop.GetFilePath(i);
             if StrLen(prefix) == 0 || StrBeginsWith(path, prefix) {
                 let rest = StrMid(path, StrLen(prefix));
                 let slash = StrFindFirst(rest, "/");
@@ -202,209 +320,21 @@ public class RNDesktop {
         }
     }
 
-    // --- building the UI --------------------------------------------------------
-
-    private func Build(root: ref<inkCompoundWidget>, controller: ref<ComputerInkGameController>) {
-        // launcher button on the vanilla screen
-        let launcher = new inkCanvas();
-        launcher.SetName(n"rn_launcher");
-        launcher.SetAnchor(inkEAnchor.BottomRight);
-        launcher.SetAnchorPoint(Vector2(1.0, 1.0));
-        launcher.SetMargin(inkMargin(0.0, 0.0, 30.0, 30.0));
-        launcher.SetSize(220.0, 56.0);
-        launcher.SetInteractive(true);
-        launcher.Reparent(root);
-        RNRect(n"bg", RNColor(0.05, 0.05, 0.07, 0.85)).Reparent(launcher);
-        let launcherText = RNText(n"label", 30, n"MainColors.Blue");
-        launcherText.SetAnchor(inkEAnchor.Centered);
-        launcherText.SetAnchorPoint(Vector2(0.5, 0.5));
-        launcherText.SetText("DESKTOP");
-        launcherText.Reparent(launcher);
-        launcher.RegisterToCallback(n"OnRelease", this, n"OnLaunch");
-
-        // the desktop itself, hidden until launched
-        let desktop = new inkCanvas();
-        desktop.SetName(n"rn_desktop");
-        desktop.SetAnchor(inkEAnchor.Fill);
-        desktop.SetInteractive(true);
-        desktop.SetVisible(false);
-        desktop.Reparent(root);
-        this.m_desktop = desktop;
-        RNRect(n"wallpaper", RNColor(0.02, 0.03, 0.05, 0.97)).Reparent(desktop);
-
-        let title = RNText(n"machine", 34, n"MainColors.Red");
-        title.SetMargin(inkMargin(40.0, 30.0, 0.0, 0.0));
-        title.SetText(StrUpper(this.m_name));
-        title.Reparent(desktop);
-
-        // icons
-        let icons = new inkVerticalPanel();
-        icons.SetName(n"icons");
-        icons.SetMargin(inkMargin(40.0, 100.0, 0.0, 0.0));
-        icons.Reparent(desktop);
-        this.AddButton(icons, n"icon_files", "[ FILES ]", n"OnFiles");
-        this.AddButton(icons, n"icon_terminal", "[ TERMINAL ]", n"OnTerminal");
-        this.AddButton(icons, n"icon_deck", "[ CYBERDECK ]", n"OnDeck");
-
-        // taskbar
-        let taskbar = new inkCanvas();
-        taskbar.SetName(n"taskbar");
-        taskbar.SetAnchor(inkEAnchor.BottomFillHorizontaly);
-        taskbar.SetAnchorPoint(Vector2(0.5, 1.0));
-        taskbar.SetSize(100.0, 60.0);
-        taskbar.Reparent(desktop);
-        RNRect(n"bg", RNColor(0.08, 0.02, 0.03, 0.95)).Reparent(taskbar);
-        let exitButton = RNText(n"exit", 28, n"MainColors.Red");
-        exitButton.SetMargin(inkMargin(30.0, 14.0, 0.0, 0.0));
-        exitButton.SetText("EXIT DESKTOP");
-        exitButton.SetInteractive(true);
-        exitButton.Reparent(taskbar);
-        exitButton.RegisterToCallback(n"OnRelease", this, n"OnExit");
-        let clock = RNText(n"clock", 28, n"MainColors.Blue");
-        clock.SetAnchor(inkEAnchor.TopRight);
-        clock.SetAnchorPoint(Vector2(1.0, 0.0));
-        clock.SetHAlign(inkEHorizontalAlign.Right);
-        clock.SetMargin(inkMargin(0.0, 14.0, 30.0, 0.0));
-        clock.Reparent(taskbar);
-        this.m_clock = clock;
-
-        // one window, reused by every app
-        let window = new inkCanvas();
-        window.SetName(n"window");
-        window.SetAnchor(inkEAnchor.Fill);
-        window.SetMargin(inkMargin(320.0, 90.0, 60.0, 100.0));
-        window.SetVisible(false);
-        window.Reparent(desktop);
-        this.m_window = window;
-        RNRect(n"bg", RNColor(0.04, 0.06, 0.09, 0.98)).Reparent(window);
-
-        let body = new inkVerticalPanel();
-        body.SetName(n"body");
-        body.SetMargin(inkMargin(24.0, 16.0, 24.0, 16.0));
-        body.Reparent(window);
-
-        let bar = new inkHorizontalPanel();
-        bar.SetName(n"titlebar");
-        bar.Reparent(body);
-        let windowTitle = RNText(n"title", 32, n"MainColors.Red");
-        windowTitle.Reparent(bar);
-        this.m_windowTitle = windowTitle;
-        let close = RNText(n"close", 32, n"MainColors.Red");
-        close.SetText("   [ X ]");
-        close.SetInteractive(true);
-        close.Reparent(bar);
-        close.RegisterToCallback(n"OnRelease", this, n"OnCloseWindow");
-
-        let header = RNText(n"header", 26, n"MainColors.Yellow");
-        header.SetMargin(inkMargin(0.0, 10.0, 0.0, 6.0));
-        header.SetInteractive(true);
-        header.Reparent(body);
-        header.RegisterToCallback(n"OnRelease", this, n"OnHeader");
-        this.m_header = header;
-
-        let i = 0;
-        while i < this.VisibleRows() {
-            let row = RNText(StringToName("row" + IntToString(i)), 26, n"MainColors.Blue");
-            row.SetInteractive(true);
-            row.SetWrappingAtPosition(1300.0);
-            row.Reparent(body);
-            row.RegisterToCallback(n"OnRelease", this, n"OnRow");
-            ArrayPush(this.m_rows, row);
-            i += 1;
-        }
-
-        let footerRow = new inkHorizontalPanel();
-        footerRow.SetName(n"footerRow");
-        footerRow.SetMargin(inkMargin(0.0, 10.0, 0.0, 0.0));
-        footerRow.Reparent(body);
-        let prevButton = RNText(n"prev", 26, n"MainColors.Yellow");
-        prevButton.SetText("[ PREV ]   ");
-        prevButton.SetInteractive(true);
-        prevButton.Reparent(footerRow);
-        prevButton.RegisterToCallback(n"OnRelease", this, n"OnPrev");
-        let nextButton = RNText(n"next", 26, n"MainColors.Yellow");
-        nextButton.SetText("[ NEXT ]   ");
-        nextButton.SetInteractive(true);
-        nextButton.Reparent(footerRow);
-        nextButton.RegisterToCallback(n"OnRelease", this, n"OnNext");
-        let footer = RNText(n"footer", 26, n"MainColors.Yellow");
-        footer.Reparent(footerRow);
-        this.m_footer = footer;
-        this.m_pager = footerRow;
-
-        // terminal input line
-        let inputRow = new inkHorizontalPanel();
-        inputRow.SetName(n"inputRow");
-        inputRow.SetMargin(inkMargin(0.0, 10.0, 0.0, 0.0));
-        inputRow.SetVisible(false);
-        inputRow.Reparent(body);
-        this.m_inputRow = inputRow;
-        let prompt = RNText(n"prompt", 26, n"MainColors.Blue");
-        prompt.SetMargin(inkMargin(0.0, 14.0, 12.0, 0.0));
-        prompt.Reparent(inputRow);
-        this.m_prompt = prompt;
-        this.m_input = TextInput.Create();
-        this.m_input.SetName(n"rn_command");
-        this.m_input.SetMaxLength(200);
-        this.m_input.SetWidth(900.0);
-        this.m_input.Reparent(inputRow, controller);
-        this.m_input.RegisterToCallback(n"OnInputKey", this, n"OnTerminalKey");
-    }
-
-    private func AddButton(parent: ref<inkCompoundWidget>, name: CName, label: String, callback: CName) {
-        let button = RNText(name, 34, n"MainColors.Blue");
-        button.SetMargin(inkMargin(0.0, 0.0, 0.0, 28.0));
-        button.SetText(label);
-        button.SetInteractive(true);
-        button.Reparent(parent);
-        button.RegisterToCallback(n"OnRelease", this, callback);
-    }
-
-    // --- drawing ----------------------------------------------------------------
-
-    private func UpdateClock() {
-        let controller = this.m_controller;
-        if !IsDefined(controller) || !IsDefined(this.m_clock) {
-            return;
-        }
-        let player = controller.GetPlayerControlledObject();
-        if !IsDefined(player) {
-            return;
-        }
-        let time = GameInstance.GetTimeSystem(player.GetGame()).GetGameTime();
-        let minutes = GameTime.Minutes(time);
-        this.m_clock.SetText(IntToString(GameTime.Hours(time)) + ":" + (minutes < 10 ? "0" : "") + IntToString(minutes));
-    }
-
-    private func SetRow(i: Int32, text: String, color: CName) {
-        let row = this.m_rows[i];
-        row.SetText(StrLen(text) > 0 ? text : " ");
-        row.BindProperty(n"tintColor", color);
-    }
-
-    private func ShowWindow(title: String) {
-        this.m_window.SetVisible(true);
-        this.m_windowTitle.SetText(title);
-        this.m_inputRow.SetVisible(this.m_mode == 3);
-        this.UpdateClock();
-    }
-
-    private func DrawFiles() {
-        this.ListCurrentFolder();
+    private func DrawFiles(desktop: ref<RNDesktop>) {
+        this.ListCurrentFolder(desktop);
         let total = ArraySize(this.m_listNames);
         this.m_offset = Clamp(this.m_offset, 0, Max(0, total - this.VisibleRows()));
-        this.ShowWindow("FILES");
-        this.m_header.SetText(StrLen(this.m_cwd) > 0 ? "/" + this.m_cwd + "    [ UP ]" : "/");
+        this.m_header.SetText(StrLen(this.m_cwd) > 0 ? "[ < UP ]   /" + this.m_cwd : "/");
 
         let i = 0;
         while i < this.VisibleRows() {
             let index = this.m_offset + i;
             if index < total {
                 if this.m_listIsDir[index] {
-                    this.SetRow(i, "[DIR]  " + this.m_listNames[index], n"MainColors.Yellow");
+                    this.SetRow(i, "[DIR]     " + this.m_listNames[index], n"MainColors.Yellow");
                 } else {
-                    let locked = this.m_locked[this.m_listIndex[index]];
-                    this.SetRow(i, (locked ? "[LOCKED]  " : "         ") + this.m_listNames[index],
+                    let locked = desktop.IsFileLocked(this.m_listIndex[index]);
+                    this.SetRow(i, (locked ? "[LOCK]    " : "[FILE]    ") + this.m_listNames[index],
                         locked ? n"MainColors.Red" : n"MainColors.Blue");
                 }
             } else {
@@ -414,40 +344,37 @@ public class RNDesktop {
         }
 
         this.m_pager.SetVisible(true);
+        this.m_save.SetVisible(false);
         this.m_footer.SetText(total > this.VisibleRows()
             ? IntToString(this.m_offset + 1) + "-" + IntToString(Min(total, this.m_offset + this.VisibleRows())) + " of " + IntToString(total)
             : IntToString(total) + " items");
     }
 
-    private func DrawDocument() {
-        let path = this.m_paths[this.m_docIndex];
-        this.ShowWindow(StrUpper(StrAfterLast(path, "/")));
-        this.m_header.SetText("/" + path + "    [ BACK ]");
-
-        let text = this.m_locked[this.m_docIndex]
+    private func DrawDocument(desktop: ref<RNDesktop>) {
+        let locked = desktop.IsFileLocked(this.m_docIndex);
+        let text = locked
             ? "ENCRYPTED. Breach this computer from the Terminal to read it."
-            : this.m_texts[this.m_docIndex];
+            : desktop.GetFileText(this.m_docIndex);
         let pages = Max(1, (StrLen(text) + this.PageChars() - 1) / this.PageChars());
         this.m_docPage = Clamp(this.m_docPage, 0, pages - 1);
-        let page = StrMid(text, this.m_docPage * this.PageChars(), this.PageChars());
 
-        // the page text goes in the first row, which wraps; the other rows stay empty
-        this.SetRow(0, page, n"MainColors.Blue");
-        let i = 1;
-        while i < this.VisibleRows() {
-            this.SetRow(i, "", n"MainColors.Blue");
-            i += 1;
-        }
+        this.m_header.SetText("/" + desktop.GetFilePath(this.m_docIndex));
+        // the page goes in the first row, which wraps
+        this.SetRow(0, StrMid(text, this.m_docPage * this.PageChars(), this.PageChars()), n"MainColors.Blue");
+        this.ClearRowsFrom(1);
+
         this.m_pager.SetVisible(true);
         this.m_footer.SetText("page " + IntToString(this.m_docPage + 1) + " of " + IntToString(pages));
+        this.m_save.SetVisible(!locked && !desktop.IsHomeMachine());
     }
 
     private func DrawTerminal() {
         let service = DeckService.Get();
-        this.ShowWindow("TERMINAL");
-        this.m_header.SetText("Type a command and press Enter, or click [ CYBERDECK ] to use the full deck.");
+        this.m_header.SetText("Type a command and press Enter.");
+        this.m_pager.SetVisible(false);
         if !IsDefined(service) {
             this.SetRow(0, "Cyberdeck service not running.", n"MainColors.Red");
+            this.ClearRowsFrom(1);
             return;
         }
         let total = service.GetLineCount();
@@ -456,152 +383,60 @@ public class RNDesktop {
         while i < this.VisibleRows() {
             let index = first + i;
             if index < total {
-                this.SetRow(i, service.GetLine(index), this.ColorFor(service.GetKind(index)));
+                this.SetRow(i, service.GetLine(index), RNDesktop.ColorFor(service.GetKind(index)));
             } else {
                 this.SetRow(i, "", n"MainColors.Blue");
             }
             i += 1;
         }
         this.m_prompt.SetText(service.GetPrompt());
-        this.m_pager.SetVisible(false);
     }
 
-    private func ColorFor(kind: Int32) -> CName {
-        switch kind {
-            case 2: return n"MainColors.Green";
-            case 3: return n"MainColors.Yellow";
-            case 4: return n"MainColors.Red";
-            default: return n"MainColors.Blue";
-        }
-    }
+    // --- input ----------------------------------------------------------------
 
-    private func Redraw() {
-        switch this.m_mode {
-            case 1: this.DrawFiles(); break;
-            case 2: this.DrawDocument(); break;
-            case 3: this.DrawTerminal(); break;
-            default: break;
-        }
-    }
-
-    // --- called by DeckService --------------------------------------------------
-
-    public func OnDeckChanged() {
-        if this.m_mode == 3 && IsDefined(this.m_desktop) {
-            this.DrawTerminal();
-        }
-    }
-
-    public func OnFilesChanged(key: String) {
-        if Equals(key, this.m_key) && IsDefined(this.m_desktop) {
-            this.ReloadGeneratedFiles();
-            if this.m_mode == 1 {
-                this.DrawFiles();
-            }
-        }
-    }
-
-    // --- clicks -----------------------------------------------------------------
-
-    protected cb func OnLaunch(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.ReloadGeneratedFiles();
-            this.m_desktop.SetVisible(true);
-            this.UpdateClock();
+    protected cb func OnWindowPress(e: ref<inkPointerEvent>) -> Bool {
+        if IsDefined(this.m_desktop) {
+            this.m_desktop.Focus(this);
         }
         return false;
     }
 
-    protected cb func OnExit(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.m_mode = 0;
-            this.m_window.SetVisible(false);
-            this.m_desktop.SetVisible(false);
+    protected cb func OnTitlePress(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"mouse_left") && IsDefined(this.m_desktop) {
+            this.m_desktop.BeginDrag(this, e.GetScreenSpacePosition());
         }
         return false;
     }
 
-    protected cb func OnFiles(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.m_mode = 1;
-            this.m_offset = 0;
-            this.DrawFiles();
+    protected cb func OnMinimize(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") && IsDefined(this.m_desktop) {
+            this.m_desktop.Minimize(this);
         }
         return false;
     }
 
-    // Connects the deck to this computer, once Lua has registered it.
-    private func ConnectDeck(service: ref<DeckService>) {
-        if this.m_terminalConnected {
-            return;
-        }
-        let addr = service.GetMachineAddr(this.m_key);
-        if StrLen(addr) > 0 {
-            this.m_terminalConnected = true;
-            service.Submit("connect " + addr);
-        } else {
-            service.RequestMachine(this.m_key, this.m_name);
-        }
-    }
-
-    protected cb func OnTerminal(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.m_mode = 3;
-            let service = DeckService.Get();
-            if IsDefined(service) {
-                this.ConnectDeck(service);
-            }
-            this.DrawTerminal();
-            if IsDefined(this.m_controller) {
-                this.m_controller.RequestSetFocus(this.m_input.GetRootWidget());
-            }
+    protected cb func OnClose(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") && IsDefined(this.m_desktop) {
+            this.m_desktop.CloseWindow(this);
         }
         return false;
     }
 
-    protected cb func OnDeck(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            let service = DeckService.Get();
-            if IsDefined(service) {
-                this.ConnectDeck(service);
-                service.Open();
-            }
-        }
-        return false;
-    }
-
-    protected cb func OnCloseWindow(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.m_mode = 0;
-            this.m_window.SetVisible(false);
-        }
-        return false;
-    }
-
-    // folder path: go up a level; document: back to its folder
+    // files: go up a folder
     protected cb func OnHeader(e: ref<inkPointerEvent>) -> Bool {
-        if !e.IsAction(n"click") {
-            return false;
-        }
-        if this.m_mode == 2 {
-            this.m_mode = 1;
-            this.DrawFiles();
-        } else {
-            if this.m_mode == 1 && StrLen(this.m_cwd) > 0 {
-                this.m_cwd = StrFindFirst(this.m_cwd, "/") >= 0 ? StrBeforeLast(this.m_cwd, "/") : "";
-                this.m_offset = 0;
-                this.DrawFiles();
-            }
+        if e.IsAction(n"click") && this.m_kind == 1 && StrLen(this.m_cwd) > 0 {
+            this.m_cwd = StrFindFirst(this.m_cwd, "/") >= 0 ? StrBeforeLast(this.m_cwd, "/") : "";
+            this.m_offset = 0;
+            this.Draw();
         }
         return false;
     }
 
     protected cb func OnRow(e: ref<inkPointerEvent>) -> Bool {
-        if !e.IsAction(n"click") || this.m_mode != 1 {
+        if !e.IsAction(n"click") || this.m_kind != 1 || !IsDefined(this.m_desktop) {
             return false;
         }
-        let name = NameToString(e.GetCurrentTarget().GetName());
-        let row = StringToInt(StrAfterFirst(name, "row"), -1);
+        let row = RNNameNumber(e.GetCurrentTarget().GetName(), "row");
         let index = this.m_offset + row;
         if row < 0 || index >= ArraySize(this.m_listNames) {
             return false;
@@ -609,12 +444,9 @@ public class RNDesktop {
         if this.m_listIsDir[index] {
             this.m_cwd = StrLen(this.m_cwd) > 0 ? this.m_cwd + "/" + this.m_listNames[index] : this.m_listNames[index];
             this.m_offset = 0;
-            this.DrawFiles();
+            this.Draw();
         } else {
-            this.m_docIndex = this.m_listIndex[index];
-            this.m_docPage = 0;
-            this.m_mode = 2;
-            this.DrawDocument();
+            this.m_desktop.OpenDocument(this.m_listIndex[index]);
         }
         return false;
     }
@@ -634,15 +466,20 @@ public class RNDesktop {
     }
 
     private func Page(step: Int32) {
-        if this.m_mode == 1 {
+        if this.m_kind == 1 {
             this.m_offset += step * this.VisibleRows();
-            this.DrawFiles();
         } else {
-            if this.m_mode == 2 {
-                this.m_docPage += step;
-                this.DrawDocument();
-            }
+            this.m_docPage += step;
         }
+        this.Draw();
+    }
+
+    protected cb func OnSave(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") && this.m_kind == 2 && IsDefined(this.m_desktop) {
+            this.m_desktop.SaveToHome(this.m_docIndex);
+            this.m_footer.SetText("Saved to your home computer.");
+        }
+        return false;
     }
 
     protected cb func OnTerminalKey(event: ref<inkKeyInputEvent>) -> Bool {
@@ -652,6 +489,602 @@ public class RNDesktop {
                 service.Submit(this.m_input.GetText());
             }
             this.m_input.SetText("");
+        }
+        return false;
+    }
+}
+
+// --- the desktop ------------------------------------------------------------------
+
+public class RNDesktop {
+    // which computer this is
+    private let m_controller: wref<ComputerInkGameController>;
+    private let m_key: String;
+    private let m_name: String;
+    private let m_isHome: Bool;
+
+    // everything the Files app shows: vanilla docs, then generated, then saved files
+    private let m_paths: array<String>;
+    private let m_texts: array<String>;
+    private let m_locked: array<Bool>;
+    private let m_vanillaCount: Int32;
+
+    // widgets
+    private let m_desktop: wref<inkCanvas>;
+    private let m_windowsLayer: wref<inkCanvas>;
+    private let m_startMenu: wref<inkCanvas>;
+    private let m_taskButtons: wref<inkHorizontalPanel>;
+    private let m_heat: wref<inkText>;
+    private let m_clock: wref<inkText>;
+
+    // windows
+    private let m_windows: array<ref<RNWindow>>;
+    private let m_nextId: Int32;
+    private let m_focusedId: Int32;
+    private let m_dragging: wref<RNWindow>;
+    private let m_grab: Vector2;
+    private let m_terminalConnected: Bool;
+
+    public static func Create(controller: ref<ComputerInkGameController>, root: ref<inkCompoundWidget>,
+                              key: String, name: String, ps: ref<ComputerControllerPS>) -> ref<RNDesktop> {
+        let self = new RNDesktop();
+        self.m_controller = controller;
+        self.m_key = key;
+        self.m_name = RNLocalize(name);
+        self.LoadVanillaDocuments(ps);
+        self.Build(root);
+
+        controller.RegisterToGlobalInputCallback(n"OnPostOnRelative", self, n"OnMouseMove");
+        controller.RegisterToGlobalInputCallback(n"OnPostOnRelease", self, n"OnMouseUp");
+
+        let service = DeckService.Get();
+        if IsDefined(service) {
+            service.RegisterTerminal(self);
+            service.RequestMachine(key, self.m_name);
+        }
+        return self;
+    }
+
+    public static func ColorFor(kind: Int32) -> CName {
+        switch kind {
+            case 2: return n"MainColors.Green";
+            case 3: return n"MainColors.Yellow";
+            case 4: return n"MainColors.Red";
+            default: return n"MainColors.Blue";
+        }
+    }
+
+    // --- files ----------------------------------------------------------------
+
+    public func GetFileCount() -> Int32 { return ArraySize(this.m_paths); }
+    public func GetFilePath(index: Int32) -> String { return this.m_paths[index]; }
+    public func GetFileText(index: Int32) -> String { return this.m_texts[index]; }
+    public func IsFileLocked(index: Int32) -> Bool { return this.m_locked[index]; }
+    public func IsHomeMachine() -> Bool { return this.m_isHome; }
+
+    private func LoadVanillaDocuments(ps: ref<ComputerControllerPS>) {
+        if !IsDefined(ps) {
+            return;
+        }
+        for thumb in ps.GetMailThumbnailWidgets() {
+            this.AddDocument("Mail", thumb.folderName, ps.GetMailWidget(thumb.documentAdress));
+        }
+        for thumb in ps.GetFileThumbnailWidgets() {
+            this.AddDocument("Documents", thumb.folderName, ps.GetFileWidget(thumb.documentAdress));
+        }
+        this.m_vanillaCount = ArraySize(this.m_paths);
+    }
+
+    private func AddDocument(root: String, folder: String, doc: SDocumentWidgetPackage) {
+        let folderName = StrLen(folder) > 0 ? RNSafeName(folder) : "Inbox";
+        let body = "";
+        if StrLen(doc.owner) > 0 {
+            body = "From: " + RNLocalize(doc.owner) + "\n";
+        }
+        if StrLen(doc.date) > 0 {
+            body += RNLocalize(doc.date) + "\n";
+        }
+        body += "\n" + RNLocalize(doc.content);
+        ArrayPush(this.m_paths, root + "/" + folderName + "/" + RNSafeName(doc.title));
+        ArrayPush(this.m_texts, body);
+        ArrayPush(this.m_locked, doc.isEncrypted);
+    }
+
+    private func ReloadFiles() {
+        ArrayResize(this.m_paths, this.m_vanillaCount);
+        ArrayResize(this.m_texts, this.m_vanillaCount);
+        ArrayResize(this.m_locked, this.m_vanillaCount);
+        let service = DeckService.Get();
+        if !IsDefined(service) {
+            return;
+        }
+        this.m_isHome = StrBeginsWith(service.GetMachineAddr(this.m_key), "home.");
+        for entry in service.GetMachineFiles(this.m_key) {
+            ArrayPush(this.m_paths, "System" + entry.path);
+            ArrayPush(this.m_texts, entry.text);
+            ArrayPush(this.m_locked, entry.locked);
+        }
+        if this.m_isHome {
+            let i = 0;
+            while i < service.GetHomeFileCount() {
+                ArrayPush(this.m_paths, "Home/Saved/" + service.GetHomeFileName(i));
+                ArrayPush(this.m_texts, service.GetHomeFileText(i));
+                ArrayPush(this.m_locked, false);
+                i += 1;
+            }
+        }
+    }
+
+    public func SaveToHome(index: Int32) {
+        let service = DeckService.Get();
+        if IsDefined(service) && index >= 0 && index < ArraySize(this.m_paths) {
+            service.RequestSaveToHome(StrUpper(this.m_name) + " - " + StrAfterLast(this.m_paths[index], "/"), this.m_texts[index]);
+        }
+    }
+
+    // --- building -------------------------------------------------------------
+
+    private func Build(root: ref<inkCompoundWidget>) {
+        // launcher button on the vanilla screen
+        let launcher = new inkCanvas();
+        launcher.SetName(n"rn_launcher");
+        launcher.SetAnchor(inkEAnchor.BottomRight);
+        launcher.SetAnchorPoint(Vector2(1.0, 1.0));
+        launcher.SetMargin(inkMargin(0.0, 0.0, 30.0, 30.0));
+        launcher.SetSize(220.0, 56.0);
+        launcher.SetInteractive(true);
+        launcher.Reparent(root);
+        RNRect(n"bg", RNColor(0.05, 0.05, 0.07, 0.85)).Reparent(launcher);
+        let launcherText = RNText(n"label", 30, n"MainColors.Blue");
+        launcherText.SetAnchor(inkEAnchor.Centered);
+        launcherText.SetAnchorPoint(Vector2(0.5, 0.5));
+        launcherText.SetText("DESKTOP");
+        launcherText.Reparent(launcher);
+        launcher.RegisterToCallback(n"OnRelease", this, n"OnLaunch");
+
+        let desktop = new inkCanvas();
+        desktop.SetName(n"rn_desktop");
+        desktop.SetAnchor(inkEAnchor.Fill);
+        desktop.SetInteractive(true);
+        desktop.SetVisible(false);
+        desktop.Reparent(root);
+        this.m_desktop = desktop;
+        RNRect(n"wallpaper", RNColor(0.02, 0.03, 0.05, 0.97)).Reparent(desktop);
+        let watermark = RNText(n"watermark", 30, n"MainColors.Red");
+        watermark.SetAnchor(inkEAnchor.TopRight);
+        watermark.SetAnchorPoint(Vector2(1.0, 0.0));
+        watermark.SetHAlign(inkEHorizontalAlign.Right);
+        watermark.SetMargin(inkMargin(0.0, 30.0, 40.0, 0.0));
+        watermark.SetOpacity(0.5);
+        watermark.SetText(StrUpper(this.m_name));
+        watermark.Reparent(desktop);
+
+        // icon tiles
+        let icons = new inkVerticalPanel();
+        icons.SetName(n"icons");
+        icons.SetMargin(inkMargin(40.0, 40.0, 0.0, 0.0));
+        icons.Reparent(desktop);
+        this.AddIcon(icons, n"app_files", "[ ]", "Files");
+        this.AddIcon(icons, n"app_mail", "@", "Mail");
+        this.AddIcon(icons, n"app_terminal", ">_", "Terminal");
+        this.AddIcon(icons, n"app_deck", "#", "Cyberdeck");
+
+        // windows sit above the icons and below the taskbar and start menu
+        let windows = new inkCanvas();
+        windows.SetName(n"windows");
+        windows.SetAnchor(inkEAnchor.Fill);
+        windows.Reparent(desktop);
+        this.m_windowsLayer = windows;
+
+        this.BuildTaskbar(desktop);
+        this.BuildStartMenu(desktop);
+    }
+
+    private func AddIcon(parent: ref<inkCompoundWidget>, name: CName, glyph: String, label: String) {
+        let tile = new inkCanvas();
+        tile.SetName(name);
+        tile.SetSize(150.0, 130.0);
+        tile.SetMargin(inkMargin(0.0, 0.0, 0.0, 22.0));
+        tile.SetInteractive(true);
+        tile.Reparent(parent);
+        tile.RegisterToCallback(n"OnRelease", this, n"OnApp");
+        let box = RNRect(n"box", RNColor(0.10, 0.12, 0.18, 0.9));
+        box.SetAnchor(inkEAnchor.TopCenter);
+        box.SetAnchorPoint(Vector2(0.5, 0.0));
+        box.SetSize(84.0, 76.0);
+        box.Reparent(tile);
+        let glyphText = RNText(n"glyph", 40, n"MainColors.Blue");
+        glyphText.SetAnchor(inkEAnchor.TopCenter);
+        glyphText.SetAnchorPoint(Vector2(0.5, 0.0));
+        glyphText.SetHAlign(inkEHorizontalAlign.Center);
+        glyphText.SetMargin(inkMargin(0.0, 12.0, 0.0, 0.0));
+        glyphText.SetText(glyph);
+        glyphText.Reparent(tile);
+        let labelText = RNText(n"label", 24, n"MainColors.Blue");
+        labelText.SetAnchor(inkEAnchor.BottomCenter);
+        labelText.SetAnchorPoint(Vector2(0.5, 1.0));
+        labelText.SetHAlign(inkEHorizontalAlign.Center);
+        labelText.SetText(label);
+        labelText.Reparent(tile);
+    }
+
+    private func BuildTaskbar(desktop: ref<inkCompoundWidget>) {
+        let taskbar = new inkCanvas();
+        taskbar.SetName(n"taskbar");
+        taskbar.SetAnchor(inkEAnchor.BottomFillHorizontaly);
+        taskbar.SetAnchorPoint(Vector2(0.5, 1.0));
+        taskbar.SetSize(100.0, 60.0);
+        taskbar.Reparent(desktop);
+        RNRect(n"bg", RNColor(0.08, 0.02, 0.03, 0.97)).Reparent(taskbar);
+
+        let left = new inkHorizontalPanel();
+        left.SetName(n"left");
+        left.SetMargin(inkMargin(20.0, 14.0, 0.0, 0.0));
+        left.Reparent(taskbar);
+        let start = RNButton(n"start", "[ START ]      ", 28, n"MainColors.Red");
+        start.Reparent(left);
+        start.RegisterToCallback(n"OnRelease", this, n"OnStart");
+        let tasks = new inkHorizontalPanel();
+        tasks.SetName(n"tasks");
+        tasks.Reparent(left);
+        this.m_taskButtons = tasks;
+
+        let tray = new inkHorizontalPanel();
+        tray.SetName(n"tray");
+        tray.SetAnchor(inkEAnchor.TopRight);
+        tray.SetAnchorPoint(Vector2(1.0, 0.0));
+        tray.SetMargin(inkMargin(0.0, 14.0, 24.0, 0.0));
+        tray.Reparent(taskbar);
+        let heat = RNText(n"heat", 26, n"MainColors.Yellow");
+        heat.Reparent(tray);
+        this.m_heat = heat;
+        let clock = RNText(n"clock", 26, n"MainColors.Blue");
+        clock.Reparent(tray);
+        this.m_clock = clock;
+    }
+
+    private func BuildStartMenu(desktop: ref<inkCompoundWidget>) {
+        let menu = new inkCanvas();
+        menu.SetName(n"startMenu");
+        menu.SetAnchor(inkEAnchor.BottomLeft);
+        menu.SetAnchorPoint(Vector2(0.0, 1.0));
+        menu.SetMargin(inkMargin(20.0, 0.0, 0.0, 66.0));
+        menu.SetSize(380.0, 420.0);
+        menu.SetVisible(false);
+        menu.SetInteractive(true);
+        menu.Reparent(desktop);
+        this.m_startMenu = menu;
+        RNRect(n"frame", RNColor(0.55, 0.12, 0.12, 0.9)).Reparent(menu);
+        let bg = RNRect(n"bg", RNColor(0.05, 0.03, 0.05, 0.99));
+        bg.SetMargin(inkMargin(2.0, 2.0, 2.0, 2.0));
+        bg.Reparent(menu);
+
+        let list = new inkVerticalPanel();
+        list.SetName(n"list");
+        list.SetMargin(inkMargin(26.0, 20.0, 0.0, 0.0));
+        list.Reparent(menu);
+        let title = RNText(n"menuTitle", 26, n"MainColors.Red");
+        title.SetMargin(inkMargin(0.0, 0.0, 0.0, 14.0));
+        title.SetText(StrUpper(this.m_name));
+        title.Reparent(list);
+        this.AddMenuItem(list, n"app_files", "Files");
+        this.AddMenuItem(list, n"app_mail", "Mail");
+        this.AddMenuItem(list, n"app_documents", "Documents");
+        this.AddMenuItem(list, n"app_system", "System");
+        this.AddMenuItem(list, n"app_terminal", "Terminal");
+        this.AddMenuItem(list, n"app_deck", "Cyberdeck");
+        this.AddMenuItem(list, n"app_exit", "Exit desktop");
+    }
+
+    private func AddMenuItem(parent: ref<inkCompoundWidget>, name: CName, label: String) {
+        let item = RNButton(name, label, 30, n"MainColors.Blue");
+        item.SetMargin(inkMargin(0.0, 0.0, 0.0, 12.0));
+        item.Reparent(parent);
+        item.RegisterToCallback(n"OnRelease", this, n"OnApp");
+    }
+
+    // --- window management -------------------------------------------------------
+
+    private func FindWindow(kind: Int32) -> ref<RNWindow> {
+        for window in this.m_windows {
+            if window.m_kind == kind {
+                return window;
+            }
+        }
+        return null;
+    }
+
+    private func OpenWindow(kind: Int32, title: String) -> ref<RNWindow> {
+        let layer = this.m_windowsLayer;
+        let controller = this.m_controller;
+        if !IsDefined(layer) || !IsDefined(controller) {
+            return null;
+        }
+        // cascade new windows so they don't stack exactly
+        let step = Cast<Float>(ArraySize(this.m_windows) % 6) * 40.0;
+        this.m_nextId += 1;
+        let window = RNWindow.Create(this, this.m_nextId, kind, title, layer, controller, 260.0 + step, 40.0 + step);
+        ArrayPush(this.m_windows, window);
+        this.Focus(window);
+        return window;
+    }
+
+    private func OpenFiles(folder: String) {
+        let window = this.FindWindow(1);
+        if !IsDefined(window) {
+            window = this.OpenWindow(1, "FILES");
+        }
+        if IsDefined(window) {
+            window.OpenFolder(folder);
+            window.SetMinimized(false);
+            this.Focus(window);
+            window.Draw();
+        }
+    }
+
+    public func OpenDocument(index: Int32) {
+        // one window per document; reuse it if it's already open
+        for window in this.m_windows {
+            if window.m_kind == 2 && window.m_docIndex == index {
+                window.SetMinimized(false);
+                this.Focus(window);
+                return;
+            }
+        }
+        let window = this.OpenWindow(2, StrUpper(StrAfterLast(this.m_paths[index], "/")));
+        if IsDefined(window) {
+            window.m_docIndex = index;
+            window.Draw();
+        }
+    }
+
+    private func OpenTerminal() {
+        let service = DeckService.Get();
+        if IsDefined(service) {
+            this.ConnectDeck(service);
+        }
+        let window = this.FindWindow(3);
+        if !IsDefined(window) {
+            window = this.OpenWindow(3, "TERMINAL");
+        }
+        if IsDefined(window) {
+            window.SetMinimized(false);
+            this.Focus(window);
+            window.Draw();
+            let input = window.GetInputWidget();
+            if IsDefined(input) && IsDefined(this.m_controller) {
+                this.m_controller.RequestSetFocus(input);
+            }
+        }
+    }
+
+    // Connects the deck to this computer, once Lua has registered it.
+    private func ConnectDeck(service: ref<DeckService>) {
+        if this.m_terminalConnected {
+            return;
+        }
+        let addr = service.GetMachineAddr(this.m_key);
+        if StrLen(addr) > 0 {
+            this.m_terminalConnected = true;
+            service.Submit("connect " + addr);
+        } else {
+            service.RequestMachine(this.m_key, this.m_name);
+        }
+    }
+
+    public func Focus(window: ref<RNWindow>) {
+        let layer = this.m_windowsLayer;
+        if IsDefined(layer) && IsDefined(window.m_root) {
+            layer.ReorderChild(window.m_root, layer.GetNumChildren() - 1);
+        }
+        this.m_focusedId = window.m_id;
+        this.RefreshTaskbar();
+    }
+
+    public func Minimize(window: ref<RNWindow>) {
+        window.SetMinimized(true);
+        this.RefreshTaskbar();
+    }
+
+    public func CloseWindow(window: ref<RNWindow>) {
+        let layer = this.m_windowsLayer;
+        if IsDefined(layer) {
+            window.Destroy(layer);
+        }
+        let kept: array<ref<RNWindow>>;
+        for other in this.m_windows {
+            if other.m_id != window.m_id {
+                ArrayPush(kept, other);
+            }
+        }
+        this.m_windows = kept;
+        this.RefreshTaskbar();
+    }
+
+    private func RefreshTaskbar() {
+        let tasks = this.m_taskButtons;
+        if !IsDefined(tasks) {
+            return;
+        }
+        tasks.RemoveAllChildren();
+        for window in this.m_windows {
+            let focused = !window.m_minimized && this.m_focusedId == window.m_id;
+            let button = RNButton(StringToName("task" + IntToString(window.m_id)),
+                "[ " + window.m_title + " ]  ", 24, focused ? n"MainColors.Red" : n"MainColors.Blue");
+            button.SetMargin(inkMargin(0.0, 2.0, 0.0, 0.0));
+            if window.m_minimized {
+                button.SetOpacity(0.6);
+            }
+            button.Reparent(tasks);
+            button.RegisterToCallback(n"OnRelease", this, n"OnTask");
+        }
+        this.UpdateTray();
+    }
+
+    private func UpdateTray() {
+        if IsDefined(this.m_heat) {
+            let service = DeckService.Get();
+            let heat = IsDefined(service) ? service.GetHeat() : 0;
+            this.m_heat.SetText("HEAT " + IntToString(heat) + "      ");
+            this.m_heat.BindProperty(n"tintColor", heat >= 50 ? n"MainColors.Red" : n"MainColors.Yellow");
+        }
+        let controller = this.m_controller;
+        if !IsDefined(controller) || !IsDefined(this.m_clock) {
+            return;
+        }
+        let player = controller.GetPlayerControlledObject();
+        if !IsDefined(player) {
+            return;
+        }
+        let time = GameInstance.GetTimeSystem(player.GetGame()).GetGameTime();
+        let minutes = GameTime.Minutes(time);
+        this.m_clock.SetText(IntToString(GameTime.Hours(time)) + ":" + (minutes < 10 ? "0" : "") + IntToString(minutes));
+    }
+
+    // --- dragging ---------------------------------------------------------------
+
+    public func BeginDrag(window: ref<RNWindow>, screenPosition: Vector2) {
+        let layer = this.m_windowsLayer;
+        if !IsDefined(layer) || !IsDefined(window.m_root) {
+            return;
+        }
+        this.Focus(window);
+        let local = WidgetUtils.GlobalToLocal(layer, screenPosition);
+        let at = window.m_root.GetTranslation();
+        this.m_grab = Vector2(local.X - at.X, local.Y - at.Y);
+        this.m_dragging = window;
+    }
+
+    protected cb func OnMouseMove(e: ref<inkPointerEvent>) -> Bool {
+        let window = this.m_dragging;
+        let layer = this.m_windowsLayer;
+        if !IsDefined(window) || !IsDefined(layer) || !IsDefined(window.m_root) {
+            return false;
+        }
+        if e.IsAction(n"mouse_x") || e.IsAction(n"mouse_y") {
+            let local = WidgetUtils.GlobalToLocal(layer, e.GetScreenSpacePosition());
+            // keep the title bar reachable
+            let x = MaxF(-900.0, local.X - this.m_grab.X);
+            let y = MaxF(0.0, local.Y - this.m_grab.Y);
+            window.m_root.SetTranslation(x, y);
+        }
+        return false;
+    }
+
+    protected cb func OnMouseUp(e: ref<inkPointerEvent>) -> Bool {
+        if IsDefined(this.m_dragging) && (e.IsAction(n"click") || e.IsAction(n"mouse_left")) {
+            this.m_dragging = null;
+        }
+        return false;
+    }
+
+    // --- called by DeckService ---------------------------------------------------
+
+    public func OnDeckChanged() {
+        for window in this.m_windows {
+            if window.m_kind == 3 {
+                window.Draw();
+            }
+        }
+    }
+
+    public func OnFilesChanged(key: String) {
+        if Equals(key, this.m_key) {
+            this.ReloadFiles();
+            this.RedrawFileWindows();
+        }
+    }
+
+    public func OnHomeChanged() {
+        if this.m_isHome {
+            this.ReloadFiles();
+            this.RedrawFileWindows();
+        }
+    }
+
+    public func OnTrayChanged() {
+        this.UpdateTray();
+    }
+
+    private func RedrawFileWindows() {
+        for window in this.m_windows {
+            if window.m_kind == 1 || window.m_kind == 2 {
+                window.Draw();
+            }
+        }
+    }
+
+    // --- clicks -----------------------------------------------------------------
+
+    protected cb func OnLaunch(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") {
+            this.ReloadFiles();
+            this.m_desktop.SetVisible(true);
+            this.RefreshTaskbar();
+        }
+        return false;
+    }
+
+    protected cb func OnStart(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") && IsDefined(this.m_startMenu) {
+            this.m_startMenu.SetVisible(!this.m_startMenu.IsVisible());
+            this.UpdateTray();
+        }
+        return false;
+    }
+
+    // icons and start menu items share this: the widget name says which app
+    protected cb func OnApp(e: ref<inkPointerEvent>) -> Bool {
+        if !e.IsAction(n"click") {
+            return false;
+        }
+        this.m_startMenu.SetVisible(false);
+        let app = e.GetCurrentTarget().GetName();
+        if Equals(app, n"app_files") {
+            this.OpenFiles("");
+        } else if Equals(app, n"app_mail") {
+            this.OpenFiles("Mail");
+        } else if Equals(app, n"app_documents") {
+            this.OpenFiles("Documents");
+        } else if Equals(app, n"app_system") {
+            this.OpenFiles("System");
+        } else if Equals(app, n"app_terminal") {
+            this.OpenTerminal();
+        } else if Equals(app, n"app_deck") {
+            this.OpenDeck();
+        } else if Equals(app, n"app_exit") {
+            this.m_desktop.SetVisible(false);
+        }
+        return false;
+    }
+
+    private func OpenDeck() {
+        let service = DeckService.Get();
+        if IsDefined(service) {
+            this.ConnectDeck(service);
+            service.Open();
+        }
+    }
+
+    protected cb func OnTask(e: ref<inkPointerEvent>) -> Bool {
+        if !e.IsAction(n"click") {
+            return false;
+        }
+        let id = RNNameNumber(e.GetCurrentTarget().GetName(), "task");
+        for window in this.m_windows {
+            if window.m_id == id {
+                if window.m_minimized {
+                    window.SetMinimized(false);
+                    this.Focus(window);
+                } else {
+                    if this.m_focusedId == window.m_id {
+                        this.Minimize(window);
+                    } else {
+                        this.Focus(window);
+                    }
+                }
+                return false;
+            }
         }
         return false;
     }

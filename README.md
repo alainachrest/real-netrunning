@@ -24,13 +24,14 @@ Bind **Open cyberdeck** in CET's Hotkeys tab, then press it in game. The deck op
 
 ### Computer desktops
 
-Every in-game computer gets a **DESKTOP** button in the bottom-right of its screen. It switches into a simulated OS over the normal screen (which stays as it was underneath):
+Every in-game computer gets a **DESKTOP** button in the bottom-right of its screen. It switches into a simulated OS over the normal screen, which stays as it was underneath.
 
-- **Files**: the computer's own mail and documents in folders, plus a `System` folder of files generated for that machine. Encrypted documents and system files stay locked until you breach the computer.
+- **Desktop**: icon tiles, a taskbar with a **START** menu, a button per open window, and a tray showing NetWatch heat and the in-game time.
+- **Windows**: drag them by the title bar, minimise with `[ _ ]`, close with `[ X ]`, click one to bring it to the front, or use its taskbar button. Several can be open at once.
+- **Files**: the computer's own mail and documents in folders, plus a `System` folder of files generated for that machine. Encrypted documents and system files stay locked until you breach the computer. Click a document to open it in its own window.
+- **Save to Home**: documents you open on other computers can be saved to V's own computers, where they appear under `Home/Saved`. They're kept per save.
 - **Terminal**: the cyberdeck shell, already connected to that computer. Type `breach` to unlock its files.
 - **Cyberdeck**: opens the full deck popup connected to that computer.
-
-If typing doesn't reach the Terminal window on a computer screen, use **Cyberdeck** instead.
 
 | Command | What it does |
 | --- | --- |

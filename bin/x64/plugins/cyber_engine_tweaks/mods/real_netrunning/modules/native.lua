@@ -65,6 +65,7 @@ local function sync(svc)
 	end
 	Native.synced = true
 	Native.last = {}
+	Native.pushHomeFiles()
 end
 
 Shell.onLine = pushLine
@@ -179,6 +180,35 @@ end
 function Native.onWorldRebuilt()
 	Native.machines = {}
 	Native.addrOwner = {}
+	Native.last.heat = nil
+	Native.pushHomeFiles()
+end
+
+-- Sends the documents V saved to every home computer desktop.
+function Native.pushHomeFiles()
+	local svc = Native.service
+	if svc == nil or Network.state == nil then return end
+	local files = Network.state.homeFiles or {}
+	call(function()
+		svc:ClearHomeFiles()
+		for _, f in ipairs(files) do svc:AddHomeFile(f.name, f.text) end
+		svc:HomeFilesReady()
+	end)
+end
+
+local MAX_HOME_FILES = 100
+
+local function saveToHome(name, text)
+	if Network.state == nil or name == nil or name == "" then return end
+	local files = Network.state.homeFiles
+	-- saving the same document again replaces it
+	for i = #files, 1, -1 do
+		if files[i].name == name then table.remove(files, i) end
+	end
+	table.insert(files, { name = name, text = text or "" })
+	while #files > MAX_HOME_FILES do table.remove(files, 1) end
+	Native.pushHomeFiles()
+	World.notify("Saved to your home computer")
 end
 
 function Native.isOpen()
@@ -218,6 +248,14 @@ function Native.update(dt)
 		if request and request ~= "" then handleMachineRequest(request) end
 	end
 
+	for _ = 1, 5 do
+		local has = call(function() return svc:HasSaveRequest() end)
+		if not has then break end
+		local name = call(function() return svc:TakeSaveName() end)
+		local text = call(function() return svc:TakeSaveText() end)
+		saveToHome(name, text)
+	end
+
 	-- run what was typed in the native deck (a few per frame at most)
 	for _ = 1, 5 do
 		local has = call(function() return svc:HasCommand() end)
@@ -230,6 +268,14 @@ function Native.update(dt)
 	Native.refreshTimer = Native.refreshTimer + dt
 	if Native.refreshTimer < 0.2 then return end
 	Native.refreshTimer = 0
+
+	-- desktop trays show heat whether or not the deck popup is open
+	local heat = Network.state and Network.state.heat or 0
+	if heat ~= Native.last.heat then
+		Native.last.heat = heat
+		call(function() svc:SetHeat(heat) end)
+	end
+
 	if not Native.isOpen() then return end
 
 	local prompt = Shell.prompt()

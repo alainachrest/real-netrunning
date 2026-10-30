@@ -22,6 +22,7 @@ function Network.newState()
 		looted = {},  -- "addr:path" -> true once paydata was downloaded
 		heat = 0,     -- NetWatch heat, 0-100
 		news = {},    -- recent world events, newest last
+		homeFiles = {}, -- documents saved to V's home computers: { name, text }
 	}
 end
 
