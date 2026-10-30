@@ -86,6 +86,7 @@ Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
 - Jack out with the hotkey, `jackout`, or the exit node on the first floor. You're thrown out, with dumpshock, if you're traced, if your health drops too low (not on Black ICE floors: Black ICE kills), or if something finds your body. Jacking in from one of V's own home computers keeps your body safe.
 - Terminal and cyberspace are the same network: anything opened in one is open in the other.
 - If a save ever loads while V was in cyberspace, V wakes up back where they jacked in.
+- Change the look in the deck, live: `cyber style` picks the floor from the game's own cyberspace meshes, `cyber scale` resizes it, and `cyber sky` sets the weather while you're jacked in (put back when you leave). Your choices are kept per save.
 
 ## Beyond Night City
 

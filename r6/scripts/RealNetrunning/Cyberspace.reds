@@ -19,6 +19,8 @@ public func RNCyberTileTemplate() -> ResRef {
 public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_jackedIn: Bool;
     private let m_collidersAdded: Int32;
+    private let m_style: Int32;
+    private let m_scale: Float;
 
     public static func Get() -> ref<RNCyberspaceSystem> {
         return GameInstance.GetScriptableSystemsContainer(GetGameInstance())
@@ -26,6 +28,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     }
 
     private func OnAttach() {
+        this.m_scale = 1.0;
         GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnTileExtract")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
@@ -63,16 +66,16 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         template.AddComponent(collider);
         this.m_collidersAdded += 1;
 
-        // What V sees: a Mikoshi platform piece from Arasaka Tower, stretched to
-        // the tile. The mesh is 4.44 x 4.69 m and 0.2 m thick, centred at
-        // (-0.12, 0, -0.10), so scale it to 8 x 8 m and lift its top to the
-        // top of the collider.
+        // What V sees: the chosen floor style ('cyber style' in the deck).
+        let style = this.m_style;
         let floor = new MeshComponent();
-        floor.mesh *= r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
+        floor.mesh *= RNFloorMesh(style);
         floor.meshAppearance = n"default";
-        floor.visualScale = Vector3(1.8, 1.707, 1.0);
+        let scale = RNFloorScale(style);
+        floor.visualScale = Vector3(scale.X * this.m_scale, scale.Y * this.m_scale, scale.Z);
+        let offset = RNFloorOffset(style);
         let place: WorldTransform;
-        WorldTransform.SetPosition(place, Vector4(0.219, 0.0, 0.495, 1.0));
+        WorldTransform.SetPosition(place, Vector4(offset.X * this.m_scale, offset.Y * this.m_scale, offset.Z, 1.0));
         WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
         floor.localTransform = place;
         floor.isEnabled = true;
@@ -85,6 +88,54 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // --- Lua -------------------------------------------------------------------
 
+    // Floor styles: which mesh is drawn on each tile. Takes effect for tiles spawned after.
+    public func FloorStyleCount() -> Int32 { return RNFloorStyleCount(); }
+    public func FloorStyleName(i: Int32) -> String { return RNFloorName(i); }
+    public func GetFloorStyle() -> Int32 { return this.m_style; }
+    public func SetFloorStyle(i: Int32) {
+        this.m_style = Max(0, Min(i, RNFloorStyleCount() - 1));
+    }
+    public func SetFloorScale(scale: Float) {
+        this.m_scale = MaxF(0.05, MinF(scale, 20.0));
+    }
+    public func GetFloorScale() -> Float { return this.m_scale; }
+
+    // Sky presets while jacked in ('cyber sky'). 0 leaves the weather alone.
+    public func SkyCount() -> Int32 { return 6; }
+    public func SkyName(i: Int32) -> String {
+        if i == 1 {
+            return "Fog";
+        }
+        if i == 2 {
+            return "Heavy clouds";
+        }
+        if i == 3 {
+            return "Toxic rain";
+        }
+        if i == 4 {
+            return "Pollution";
+        }
+        if i == 5 {
+            return "Deep blue";
+        }
+        return "Normal weather";
+    }
+    public func SetSky(i: Int32) -> Bool {
+        let weather = GameInstance.GetWeatherSystem(GetGameInstance());
+        if !IsDefined(weather) {
+            return false;
+        }
+        if i <= 0 {
+            return weather.ResetWeather(true, 3.0);
+        }
+        let name = n"24h_weather_fog";
+        if i == 2 { name = n"24h_weather_heavy_clouds"; }
+        if i == 3 { name = n"24h_weather_toxic_rain"; }
+        if i == 4 { name = n"24h_weather_pollution"; }
+        if i == 5 { name = n"q302_deeb_blue"; }
+        return weather.SetWeather(name, 3.0, 9u);
+    }
+
     public func SetJackedIn(on: Bool) {
         this.m_jackedIn = on;
     }
@@ -92,6 +143,65 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     public func IsJackedIn() -> Bool {
         return this.m_jackedIn;
     }
+}
+
+// --- floor styles --------------------------------------------------------------
+// Sizes are only known for the Arasaka Tower piece (4.44 x 4.69 m, centred at
+// (-0.12, 0, -0.10)); the rest start at their own size and can be resized in
+// game with 'cyber scale'.
+
+public func RNFloorStyleCount() -> Int32 { return 6; }
+
+public func RNFloorName(i: Int32) -> String {
+    if i == 1 {
+        return "Mikoshi prison floor";
+    }
+    if i == 2 {
+        return "Mikoshi prison platform";
+    }
+    if i == 3 {
+        return "Mikoshi square floor";
+    }
+    if i == 4 {
+        return "Cyberspace module";
+    }
+    if i == 5 {
+        return "Relic cyberspace deck";
+    }
+    return "Arasaka Tower Mikoshi platform";
+}
+
+public func RNFloorMesh(i: Int32) -> ResRef {
+    if i == 1 {
+        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_floor_a.mesh";
+    }
+    if i == 2 {
+        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_platform_a.mesh";
+    }
+    if i == 3 {
+        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_square_deco_floor_a.mesh";
+    }
+    if i == 4 {
+        return r"base\\environment\\architecture\\_temp\\cyberspace\\cyberspace_module_a.mesh";
+    }
+    if i == 5 {
+        return r"base\\environment\\quests\\q101_cyberspace\\q101_cyberspace_deco_a.mesh";
+    }
+    return r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
+}
+
+public func RNFloorScale(i: Int32) -> Vector3 {
+    if i == 0 {
+        return Vector3(1.8, 1.707, 1.0);
+    }
+    return Vector3(1.0, 1.0, 1.0);
+}
+
+public func RNFloorOffset(i: Int32) -> Vector3 {
+    if i == 0 {
+        return Vector3(0.219, 0.0, 0.495);
+    }
+    return Vector3(0.0, 0.0, 0.5);
 }
 
 public func RNSavingBlocked() -> Bool {

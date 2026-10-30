@@ -237,6 +237,20 @@ function World.inVehicle()
 	return try(function() return Game.GetMountedVehicle(Game.GetPlayer()) ~= nil end) == true
 end
 
+-- Cyberspace look, set in Cyberspace.reds: floor style, floor scale, sky preset.
+local function cyberSystem()
+	return Game.GetScriptableSystemsContainer():Get("RealNetrunning.RNCyberspaceSystem")
+end
+
+function World.cyberCall(method, ...)
+	local args = { ... }
+	return try(function()
+		local system = cyberSystem()
+		if system == nil then return nil end
+		return system[method](system, unpack(args))
+	end)
+end
+
 -- Tells redscript V is in cyberspace (blocks manual saves).
 function World.setJackedIn(on)
 	return try(function()
