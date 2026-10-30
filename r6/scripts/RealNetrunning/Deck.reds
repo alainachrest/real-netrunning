@@ -172,6 +172,7 @@ public class DeckPopup extends InGamePopup {
         super.OnCreate();
 
         this.m_visibleRows = 14;
+        ArrayClear(this.m_rows); // in case widgets are ever rebuilt
 
         this.m_header = InGamePopupHeader.Create();
         this.m_header.SetTitle("REAL NETRUNNING");
@@ -355,9 +356,10 @@ public class DeckPopup extends InGamePopup {
     }
 
     public static func Create(service: ref<DeckService>) -> ref<DeckPopup> {
+        // Don't call CreateInstance here: Codeware creates the popup's widgets when it
+        // attaches it to the screen. Creating them early built a second, invisible set.
         let self = new DeckPopup();
         self.m_service = service;
-        self.CreateInstance();
         return self;
     }
 }
