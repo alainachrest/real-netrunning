@@ -38,6 +38,8 @@ public class RNBrowserView {
     private let m_blocks: array<ref<RNPageBlock>>;
     private let m_unitStart: array<Int32>;
     private let m_unitEnd: array<Int32>;
+    private let m_external: wref<inkCanvas>; // holds a page embedded from another mod's site
+    private let m_externalShown: Bool;
     private let m_offset: Float;       // how far the page is scrolled, in pixels
     private let m_estimate: Float;     // estimated page height, used until layout is known
 
@@ -46,6 +48,9 @@ public class RNBrowserView {
     private func ContentBottom() -> Float { return 742.0; }
     private func ContentWidth() -> Float { return 1220.0; }
     private func ViewportHeight() -> Float { return 520.0; }
+    // the size other mods' site pages are laid out at before scaling
+    private func ExternalWidth() -> Float { return 1720.0; }
+    private func ExternalHeight() -> Float { return 760.0; }
 
     public static func Create(desktop: wref<RNDesktop>, root: ref<inkCanvas>, controller: ref<inkGameController>) -> ref<RNBrowserView> {
         let self = new RNBrowserView();
@@ -142,6 +147,18 @@ public class RNBrowserView {
         viewport.SetUseInternalMask(true);
         viewport.Reparent(page);
         this.m_viewport = viewport;
+        // pages from other mods' sites (Browser Extension) are embedded here, scaled to fit
+        let external = new inkCanvas();
+        external.SetName(n"external");
+        external.SetSize(this.ExternalWidth(), this.ExternalHeight());
+        let scale = MinF(1288.0 / this.ExternalWidth(), (this.ContentBottom() - this.ContentTop()) / this.ExternalHeight());
+        external.SetScale(Vector2(scale, scale));
+        external.SetRenderTransformPivot(Vector2(0.0, 0.0));
+        external.SetTranslation((1288.0 - this.ExternalWidth() * scale) / 2.0, 0.0);
+        external.SetVisible(false);
+        external.Reparent(page);
+        this.m_external = external;
+
         let content = new inkVerticalPanel();
         content.SetName(n"content");
         content.SetFitToContent(true);
@@ -200,24 +217,93 @@ public class RNBrowserView {
         if StrLen(url) == 0 {
             return;
         }
-        if remember && StrLen(this.m_url) > 0 && NotEquals(this.m_url, url) && !StrBeginsWith(url, "do://") {
+        if remember && StrLen(this.m_url) > 0 && NotEquals(this.m_url, url) && !StrBeginsWith(url, "do://") && !StrBeginsWith(url, "open://") {
             ArrayPush(this.m_back, this.m_url);
             while ArraySize(this.m_back) > 30 {
                 ArrayErase(this.m_back, 0);
             }
             ArrayClear(this.m_forward);
         }
+        // vanilla sites open in the computer's own browser
+        if StrBeginsWith(url, "open://") {
+            let desktop = this.m_desktop;
+            if IsDefined(desktop) {
+                desktop.OpenInComputerBrowser(StrAfterFirst(url, "open://"));
+            }
+            return;
+        }
         this.m_requested = url;
         if !StrBeginsWith(url, "do://") {
             this.m_url = url;
             this.m_address.SetText(url);
         }
+        // other mods' sites: embed the page if a Browser Extension site serves it
+        if StrBeginsWith(StrLower(url), "netdir://") {
+            if this.ShowExternal(url) {
+                return;
+            }
+            this.m_requested = "nc://outside?" + url;
+        }
         this.SetStatus("Connecting to " + url + " ...");
         let service = DeckService.Get();
         if IsDefined(service) {
-            service.RequestPage(url);
+            let desktop = this.m_desktop;
+            if IsDefined(desktop) {
+                desktop.PushModSites();
+            }
+            service.RequestPage(this.m_requested);
         } else {
             this.ShowMessage("Cyberdeck service not running.");
+        }
+    }
+
+    public func IsShowingExternal() -> Bool {
+        let root = this.m_root;
+        return this.m_externalShown && IsDefined(root) && root.IsVisible();
+    }
+
+    private func ShowExternal(address: String) -> Bool {
+        let desktop = this.m_desktop;
+        let holder = this.m_external;
+        if !IsDefined(desktop) || !IsDefined(holder) {
+            return false;
+        }
+        let widget = RNExtensionPage(desktop.GetDevice(), address);
+        if !IsDefined(widget) {
+            return false;
+        }
+        holder.RemoveAllChildren();
+        widget.Reparent(holder);
+        widget.SetAnchor(inkEAnchor.Fill);
+        widget.SetVisible(true);
+        holder.SetVisible(true);
+        this.m_externalShown = true;
+        let viewport = this.m_viewport;
+        if IsDefined(viewport) {
+            viewport.SetVisible(false);
+        }
+        let thumb = this.m_thumb;
+        if IsDefined(thumb) {
+            thumb.SetVisible(false);
+        }
+        this.m_requested = "";
+        this.m_title = address;
+        this.m_tabText.SetText(RNShorten(StrAfterFirst(address, "://"), 30));
+        this.m_lock.SetText("NETdir");
+        this.SetStatus("Done");
+        return true;
+    }
+
+    private func HideExternal() {
+        let holder = this.m_external;
+        if IsDefined(holder) {
+            holder.RemoveAllChildren();
+            holder.SetVisible(false);
+        }
+        this.m_externalShown = false;
+        let viewport = this.m_viewport;
+        if IsDefined(viewport) {
+            viewport.SetVisible(true);
         }
     }
 
@@ -230,6 +316,7 @@ public class RNBrowserView {
         if !IsDefined(service) {
             return false;
         }
+        this.HideExternal();
         this.m_blocks = service.GetPageBlocks(url);
         this.m_url = service.GetPageCanonical(url);
         this.m_title = service.GetPageTitle(url);
@@ -238,7 +325,8 @@ public class RNBrowserView {
         this.m_address.SetText(this.m_url);
         this.m_tabText.SetText(RNShorten(this.m_title, 30));
         this.m_tabAccent.BindProperty(n"tintColor", this.m_theme);
-        this.m_lock.SetText(StrBeginsWith(this.m_url, "net://") ? "NET" : (StrBeginsWith(this.m_url, "market://") ? "NCSE" : "NC//NET"));
+        this.m_lock.SetText(StrBeginsWith(this.m_url, "net://") ? "NET" : (StrBeginsWith(this.m_url, "market://") ? "NCSE"
+            : (StrBeginsWith(this.m_url, "shop://") ? "SHOP" : (StrBeginsWith(StrLower(this.m_url), "netdir://") ? "NETdir" : "NC//NET"))));
         this.BuildUnits();
         this.Render();
         this.SetStatus("Done");

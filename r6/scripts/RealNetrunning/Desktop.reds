@@ -1058,6 +1058,79 @@ public class RNDesktop {
         this.RefreshTaskbar();
     }
 
+    // --- other mods' sites -------------------------------------------------------
+
+    public func GetDevice() -> ref<GameObject> {
+        let controller = this.m_controller;
+        if !IsDefined(controller) {
+            return null;
+        }
+        return controller.GetOwnerEntity() as GameObject;
+    }
+
+    // Tells Lua which sites this computer has, for the portal.
+    public func PushModSites() {
+        let service = DeckService.Get();
+        if !IsDefined(service) {
+            return;
+        }
+        let sites = RNReadExtensionSites(this.GetDevice());
+        for site in RNReadJournalSites(GetGameInstance()) {
+            let duplicate = false;
+            for existing in sites {
+                if Equals(StrLower(existing.address), StrLower(site.address)) {
+                    duplicate = true;
+                }
+            }
+            if !duplicate {
+                ArrayPush(sites, site);
+            }
+        }
+        service.SetModSites(sites);
+    }
+
+    // A link clicked inside an embedded site page on this computer.
+    public func RouteLink(device: ref<GameObject>, address: String) -> Bool {
+        let mine = this.GetDevice();
+        let desktop = this.m_desktop;
+        if !IsDefined(mine) || !IsDefined(device) || !IsDefined(desktop) || !desktop.IsVisible() {
+            return false;
+        }
+        if !Equals(mine.GetEntityID(), device.GetEntityID()) {
+            return false;
+        }
+        for window in this.m_windows {
+            if window.m_kind == 4 {
+                let browser = window.GetBrowser();
+                if IsDefined(browser) && browser.IsShowingExternal() {
+                    browser.Navigate(address, true);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Vanilla sites live in the computer's own browser: close the desktop and open it there.
+    public func OpenInComputerBrowser(address: String) {
+        let controller = this.m_controller;
+        let desktop = this.m_desktop;
+        if !IsDefined(controller) {
+            return;
+        }
+        if IsDefined(desktop) {
+            desktop.SetVisible(false);
+        }
+        controller.ShowInternet();
+        let service = DeckService.Get();
+        if IsDefined(service) {
+            let browser = service.ComputerBrowserFor(this.GetDevice());
+            if IsDefined(browser) {
+                browser.RNLoad(address);
+            }
+        }
+    }
+
     private func OpenTerminal() {
         let service = DeckService.Get();
         if IsDefined(service) {

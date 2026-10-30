@@ -7,6 +7,7 @@ local Network = require("modules/network")
 local World = require("modules/world")
 local Rng = require("modules/rng")
 local Web = require("modules/web")
+local Stores = require("modules/stores")
 
 local Native = {
 	service = nil,
@@ -55,6 +56,41 @@ local function pushLine(text, kind)
 		call(function() svc:AddLine(text, Native.kinds[kind] or 0) end)
 	end
 end
+
+-- Stores and sites from other mods, read through DeckService (Stores.reds).
+local function svcCall(fn, fallback)
+	local svc = Native.service or Native.getService()
+	if svc == nil then return fallback end
+	local result = call(function() return fn(svc) end)
+	if result == nil then return fallback end
+	return result
+end
+
+Stores.provider = {
+	installed = function() return svcCall(function(s) return s:AtelierInstalled() end, false) end,
+	refresh = function() return svcCall(function(s) return s:RefreshStores() end, 0) end,
+	name = function(i) return svcCall(function(s) return s:StoreName(i) end, "") end,
+	itemCount = function(i) return svcCall(function(s) return s:StoreItemCount(i) end, 0) end,
+	item = function(i, j)
+		return svcCall(function(s)
+			return { name = s:StoreItemName(i, j), id = s:StoreItemId(i, j), price = s:StoreItemPrice(i, j),
+				quantity = s:StoreItemQuantity(i, j), quality = s:StoreItemQuality(i, j) }
+		end, { name = "?", id = "", price = 0, quantity = 1, quality = "" })
+	end,
+	buyAtelier = function(i, j) return svcCall(function(s) return s:BuyStoreItem(i, j) end, "err:The store didn't answer.") end,
+	itemName = function(id) return svcCall(function(s) return s:ItemName(id) end, id) end,
+	itemPrice = function(id, price, qty) return svcCall(function(s) return s:ItemPrice(id, price, qty) end, price) end,
+	buy = function(id, qty, price) return svcCall(function(s) return s:BuyItem(id, qty, price) end, "err:The store didn't answer.") end,
+	sites = function()
+		return svcCall(function(s)
+			local list = {}
+			for i = 0, s:ModSiteCount() - 1 do
+				table.insert(list, { name = s:ModSiteName(i), address = s:ModSiteAddress(i), embedded = s:ModSiteKind(i) == 1 })
+			end
+			return list
+		end, {})
+	end,
+}
 
 -- Copies the current screen into the native deck (first use, or after a reload).
 local function sync(svc)

@@ -24,12 +24,17 @@
 --   net://<address>        a network's site (and its files once breached)
 --   market://              the exchange; market://<TICKER> for one company
 --   do://buy/<T>/<qty>, do://sell/<T>/<qty|all>   trades
+--   shop://                 other mods' stores; shop://<store>[/p<page>], shop://<store>/item/<n>
+--   do://shop/<store>/<n>   buy item n
+--   NETdir://...            other mods' sites: embedded by Browser.reds, or nc://outside?<address>
+--   open://<address>        open a vanilla site in the computer's own browser (Browser.reds)
 
 local Network = require("modules/network")
 local Lore = require("modules/lore")
 local Market = require("modules/market")
 local World = require("modules/world")
 local NetWatch = require("modules/netwatch")
+local Stores = require("modules/stores")
 
 local Web = {}
 
@@ -123,11 +128,15 @@ function Page:portalNav()
 	self:nav("Exchange", "market://")
 	self:nav("News", "nc://news")
 	self:nav("NetWatch", "nc://netwatch")
+	self:nav("Stores", "shop://")
 	return self
 end
 
 local function money(n) return string.format("%.2f", n) end
 local function pct(n) return string.format("%+.1f%%", n) end
+local function status(p, result)
+	if result then p:notice(result.text, result.ok and GREEN or RED) end
+end
 
 ---------------------------------------------------------------------------
 -- Portal pages
@@ -170,6 +179,122 @@ local function home()
 		p:heading("Community sites")
 		for _, net in ipairs(sitesList) do p:link(net.name, "net://" .. net.addr) end
 	end
+
+	-- other mods' stores and sites on this computer
+	local stores = Stores.list()
+	if #stores > 0 then
+		p:heading("Stores")
+		for i = 1, math.min(4, #stores) do
+			local s = stores[i]
+			p:card(s.name, s.count .. " items  -  " .. s.source, "shop://" .. s.key, GREEN)
+		end
+		p:link("All " .. #stores .. " stores", "shop://")
+	end
+	local sites = Stores.sites()
+	if #sites > 0 then
+		p:heading("Sites on this computer")
+		for _, site in ipairs(sites) do
+			p:card(site.name, site.embedded and site.address or (site.address .. "  -  opens in the computer's browser"),
+				site.address, site.embedded and BLUE or YELLOW)
+		end
+	end
+	return p
+end
+
+---------------------------------------------------------------------------
+-- Other mods' stores and sites
+---------------------------------------------------------------------------
+
+local function shopList()
+	local p = page("Stores", "shop://", GREEN)
+	p:banner("STORES", "Every store on the Net, delivered to your door", GREEN)
+	p:portalNav()
+	p:field("Your eddies", tostring(World.getMoney()), YELLOW)
+	local stores = Stores.list()
+	if #stores == 0 then
+		p:notice(Stores.atelierInstalled() and "Virtual Atelier is installed but no stores are registered yet. Try again in a moment."
+			or "No stores found. Install Virtual Atelier and some Atelier stores, or a mod that adds stores to Real Netrunning.", YELLOW)
+		return p
+	end
+	for _, s in ipairs(stores) do
+		p:card(s.name, s.count .. " items  -  " .. s.source, "shop://" .. s.key, GREEN)
+	end
+	return p
+end
+
+local function shopPage(key, pageNo, result)
+	local per = Stores.perPage
+	pageNo = math.max(1, pageNo or 1)
+	local store = Stores.get(key, (pageNo - 1) * per + 1, pageNo * per)
+	if store == nil then
+		local p = page("Stores", "shop://" .. key, RED)
+		p:banner("404", "Store not found", RED)
+		p:portalNav()
+		p:notice("That store isn't on the Net anymore.", RED)
+		return p
+	end
+	local pages = math.max(1, math.ceil(store.count / per))
+	local url = "shop://" .. key .. (pageNo > 1 and ("/p" .. pageNo) or "")
+	local p = page(store.name, url, GREEN)
+	p:banner(store.name:upper(), store.source, GREEN)
+	p:nav("All stores", "shop://")
+	p:nav("Portal", "nc://home")
+	status(p, result)
+	if store.about then p:text(store.about) end
+	p:field("Your eddies", tostring(World.getMoney()), YELLOW)
+	p:field("Items", tostring(store.count))
+	p:row({ "ITEM", "QUALITY", "QTY", "PRICE" }, "", YELLOW)
+	for n, item in ipairs(store.items) do
+		local index = store.first + n - 1
+		p:row({ item.name, item.quality ~= "" and item.quality or "-", "x" .. item.quantity, tostring(item.price) .. " eddies" },
+			"shop://" .. key .. "/item/" .. index, BLUE)
+	end
+	if pages > 1 then
+		p:divider()
+		p:field("Page", pageNo .. " of " .. pages)
+		if pageNo > 1 then p:button("< Previous", "shop://" .. key .. (pageNo > 2 and ("/p" .. (pageNo - 1)) or ""), BLUE) end
+		if pageNo < pages then p:button("Next >", "shop://" .. key .. "/p" .. (pageNo + 1), BLUE) end
+	end
+	return p
+end
+
+local function itemPage(key, index, result)
+	local store = Stores.get(key, index, index)
+	local item = store and store.items[1]
+	if item == nil then return shopPage(key, 1, result or { ok = false, text = "That item is no longer in the store." }) end
+	local p = page(item.name, "shop://" .. key .. "/item/" .. index, GREEN)
+	p:banner(store.name:upper(), store.source, GREEN)
+	p:nav("Back to the store", "shop://" .. key .. "/p" .. math.ceil(index / Stores.perPage))
+	p:nav("All stores", "shop://")
+	status(p, result)
+	p:heading(item.name, GREEN)
+	p:field("Price", item.price .. " eddies", YELLOW)
+	if item.quality ~= "" then p:field("Quality", item.quality) end
+	p:field("Quantity", "x" .. item.quantity)
+	p:field("Item ID", item.id)
+	p:field("Your eddies", tostring(World.getMoney()), YELLOW)
+	p:button("Buy for " .. item.price .. " eddies", "do://shop/" .. key .. "/" .. index, GREEN)
+	p:text("Delivered straight to your inventory.", BLUE)
+	return p
+end
+
+-- A vanilla site, or a mod site this computer can't embed.
+local function outsidePage(address)
+	local p = page(address, address, YELLOW)
+	p:banner("NETDIR", address, YELLOW)
+	p:portalNav()
+	local known
+	for _, site in ipairs(Stores.sites()) do
+		if site.address:lower() == address:lower() then known = site end
+	end
+	if known then
+		p:heading(known.name, YELLOW)
+		p:text("This site runs on the computer's own browser.")
+	else
+		p:notice("No site on this computer answers at " .. address .. ".", RED)
+		p:text("Some sites only exist on certain computers. You can still try the computer's own browser.")
+	end
+	p:button("Open in the computer's browser", "open://" .. address, YELLOW)
 	return p
 end
 
@@ -364,10 +489,6 @@ end
 -- Stock exchange
 ---------------------------------------------------------------------------
 
-local function status(p, result)
-	if result then p:notice(result.text, result.ok and GREEN or RED) end
-end
-
 local function marketPage(result)
 	local p = page("NC Stock Exchange", "market://", YELLOW)
 	p:banner("NC STOCK EXCHANGE", "Live prices from the Free City", YELLOW)
@@ -446,6 +567,21 @@ function Web.render(url)
 	if url == "market://" or url == "market" then return marketPage() end
 	local ticker = url:match("^market://(%w+)$")
 	if ticker then return companyPage(ticker) end
+
+	if url == "shop://" or url == "shop" then return shopList() end
+	local skey, sindex = url:match("^shop://(%a%a/[^/]+)/item/(%d+)$")
+	if skey then return itemPage(skey, tonumber(sindex)) end
+	local pkey, pno = url:match("^shop://(%a%a/[^/]+)/p(%d+)$")
+	if pkey then return shopPage(pkey, tonumber(pno)) end
+	local key = url:match("^shop://(%a%a/[^/]+)$")
+	if key then return shopPage(key, 1) end
+	local bkey, bindex = url:match("^do://shop/(%a%a/[^/]+)/(%d+)$")
+	if bkey then
+		local ok, msg = Stores.buy(bkey, tonumber(bindex))
+		return itemPage(bkey, tonumber(bindex), { ok = ok, text = msg })
+	end
+	local outside = url:match("^nc://outside%?(.+)$")
+	if outside then return outsidePage(outside) end
 
 	local action, t, qty = url:match("^do://(%a+)/(%w+)/(%w+)$")
 	if action == "buy" or action == "sell" then

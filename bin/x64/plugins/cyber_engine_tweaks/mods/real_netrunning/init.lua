@@ -170,6 +170,9 @@ RealNetrunning.api = {
 	reveal = function(addr) return Network.state ~= nil and Network.reveal(addr, "api") end,
 	-- def = { addr, name, org, tier, ice, reveals, known, files = { ["path"] = { text, paydata } } }
 	registerNetwork = function(def) return Network.registerExternal(def) ~= nil end,
+	-- Add a store to the desktop Browser: { id, name, items = { { id = "Items.X", price = 100 } } }
+	registerStore = function(def) return require("modules/stores").register(def) end,
+	unregisterStore = function(id) require("modules/stores").unregister(id) end,
 	run = function(command) Shell.run(command) end,
 	openDeck = function() return Native.open() end,
 }

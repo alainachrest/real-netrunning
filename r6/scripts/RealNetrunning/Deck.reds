@@ -68,6 +68,11 @@ public class DeckService extends ScriptableService {
     private let m_pageThemes: array<String>;
     private let m_pageBlocks: array<ref<RNPageBlock>>;
 
+    // other mods' stores and sites (see Stores.reds)
+    private let m_stores: array<ref<RNStore>>;
+    private let m_sites: array<ref<RNModSite>>;
+    private let m_computerBrowsers: array<wref<BrowserController>>;
+
     // Fixed limits, and defaults that don't rely on a start-up callback.
     private let m_traceSet: Bool;
 
@@ -204,6 +209,124 @@ public class DeckService extends ScriptableService {
         }
         ArrayPush(live, desktop);
         this.m_terminals = live;
+    }
+
+    // --- other mods' stores (Virtual Atelier) ---------------------------------------
+
+    public func AtelierInstalled() -> Bool {
+        return RNAtelierInstalled();
+    }
+
+    // Lua calls this before drawing store pages.
+    public func RefreshStores() -> Int32 {
+        this.m_stores = RNReadAtelierStores(GetGameInstance());
+        return ArraySize(this.m_stores);
+    }
+
+    private func StoreAt(i: Int32) -> ref<RNStore> {
+        if i < 0 || i >= ArraySize(this.m_stores) {
+            return null;
+        }
+        return this.m_stores[i];
+    }
+
+    private func ItemAt(i: Int32, j: Int32) -> ref<RNStoreItem> {
+        let store = this.StoreAt(i);
+        if !IsDefined(store) || j < 0 || j >= ArraySize(store.items) {
+            return null;
+        }
+        return store.items[j];
+    }
+
+    public func StoreCount() -> Int32 { return ArraySize(this.m_stores); }
+    public func StoreName(i: Int32) -> String { let s = this.StoreAt(i); return IsDefined(s) ? s.name : ""; }
+    public func StoreId(i: Int32) -> String { let s = this.StoreAt(i); return IsDefined(s) ? s.id : ""; }
+    public func StoreItemCount(i: Int32) -> Int32 { let s = this.StoreAt(i); return IsDefined(s) ? ArraySize(s.items) : 0; }
+    public func StoreItemName(i: Int32, j: Int32) -> String { let it = this.ItemAt(i, j); return IsDefined(it) ? it.name : ""; }
+    public func StoreItemId(i: Int32, j: Int32) -> String { let it = this.ItemAt(i, j); return IsDefined(it) ? it.tdbid : ""; }
+    public func StoreItemPrice(i: Int32, j: Int32) -> Int32 { let it = this.ItemAt(i, j); return IsDefined(it) ? it.price : 0; }
+    public func StoreItemQuantity(i: Int32, j: Int32) -> Int32 { let it = this.ItemAt(i, j); return IsDefined(it) ? it.quantity : 1; }
+    public func StoreItemQuality(i: Int32, j: Int32) -> String { let it = this.ItemAt(i, j); return IsDefined(it) ? it.quality : ""; }
+
+    // Returns "ok:<message>" or "err:<message>".
+    public func BuyStoreItem(i: Int32, j: Int32) -> String {
+        let item = this.ItemAt(i, j);
+        if !IsDefined(item) {
+            return "err:That item is no longer in the store.";
+        }
+        return RNBuyItem(GetGameInstance(), item.tdbid, item.quantity, item.price);
+    }
+
+    // For stores other CET mods register with Real Netrunning's Lua API.
+    public func ItemName(tdbid: String) -> String {
+        return RNItemName(tdbid);
+    }
+
+    public func ItemPrice(tdbid: String, price: Int32, quantity: Int32) -> Int32 {
+        return RNItemPrice(GetGameInstance(), tdbid, price, quantity);
+    }
+
+    public func BuyItem(tdbid: String, quantity: Int32, price: Int32) -> String {
+        return RNBuyItem(GetGameInstance(), tdbid, quantity, RNItemPrice(GetGameInstance(), tdbid, price, quantity));
+    }
+
+    // --- other mods' sites (Browser Extension and vanilla) -----------------------------
+
+    // A desktop Browser sets the sites of the computer it's on before each page.
+    public func SetModSites(sites: array<ref<RNModSite>>) {
+        this.m_sites = sites;
+    }
+
+    private func SiteAt(i: Int32) -> ref<RNModSite> {
+        if i < 0 || i >= ArraySize(this.m_sites) {
+            return null;
+        }
+        return this.m_sites[i];
+    }
+
+    public func ModSiteCount() -> Int32 { return ArraySize(this.m_sites); }
+    public func ModSiteName(i: Int32) -> String { let s = this.SiteAt(i); return IsDefined(s) ? s.name : ""; }
+    public func ModSiteAddress(i: Int32) -> String { let s = this.SiteAt(i); return IsDefined(s) ? s.address : ""; }
+    public func ModSiteKind(i: Int32) -> Int32 { let s = this.SiteAt(i); return IsDefined(s) ? s.kind : 0; }
+
+    public func RegisterComputerBrowser(browser: ref<BrowserController>) {
+        let live: array<wref<BrowserController>>;
+        for b in this.m_computerBrowsers {
+            if IsDefined(b) {
+                ArrayPush(live, b);
+            }
+        }
+        ArrayPush(live, browser);
+        this.m_computerBrowsers = live;
+    }
+
+    public func ComputerBrowserFor(device: ref<GameObject>) -> ref<BrowserController> {
+        if !IsDefined(device) {
+            return null;
+        }
+        let id = device.GetEntityID();
+        for b in this.m_computerBrowsers {
+            if IsDefined(b) {
+                let owner = b.m_rnOwner;
+                if IsDefined(owner) {
+                    if Equals(owner.GetEntityID(), id) {
+                        return b;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // A link clicked inside an embedded page: show it in the desktop Browser
+    // that is displaying that page, if there is one.
+    public func RouteBrowserLink(device: ref<GameObject>, address: String) -> Bool {
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) && terminal.RouteLink(device, address) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // A desktop asks Lua for a computer's generated files. Lua takes "key|name".

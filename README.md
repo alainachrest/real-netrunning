@@ -9,6 +9,8 @@ Version 0.1.0 — first playable build.
 - Cyberpunk 2077 2.5
 - Cyber Engine Tweaks 1.38 or newer
 - redscript and Codeware 1.21 or newer, for the in-game deck
+- Optional: [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) 1.4.8 or newer, for its stores in the desktop Browser
+- Optional: [Browser Extension](https://www.nexusmods.com/cyberpunk2077/mods/10038), for other mods' sites in the desktop Browser
 - Optional: CyberScript with the extension API (`api-hooks-and-2.5` branch), for the CyberScript bridge https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5
 
 ## Install
@@ -116,6 +118,26 @@ Heat now has consequences. Your threat level shows in `status`, `netwatch`, and 
 - An agent takes a few seconds to arrive, then attacks your trace until you `fight` it or disconnect. Beating it pays a bounty; losing locks your deck out of breaching for 20 seconds.
 - Attacks in the world only happen while you're not connected. Turn them off with `netwatch world off`.
 - `scrub` on networks you own brings heat back down.
+
+## Other mods' stores and sites
+
+The desktop Browser brings in what other mods add to Night City's net. Both mods are optional: Real Netrunning compiles and runs without them.
+
+- **Stores** (`shop://`, or **Stores** in the portal bar): every Virtual Atelier store, with its items, prices and quality, 40 to a page. Open an item and press **Buy**: the eddies come out of V's wallet and the item goes straight into the inventory.
+- **Sites on this computer**: the portal lists every site Browser Extension mods add to the computer you're on, such as Virtual Atelier's own site (with its outfit preview). These open inside the Browser window, as the mod built them.
+- Vanilla sites from the journal (EZEstates, AutoFixer and the rest) are listed too. They open in the computer's own browser, with a button to switch over.
+
+Other CET mods can add stores too:
+
+```lua
+local rn = GetMod("real_netrunning")
+if rn and rn.api and rn.api.registerStore then
+    rn.api.registerStore({ id = "mystore", name = "My Store", items = {
+        { id = "Items.Preset_Lexington_Default", price = 1200 },
+        { id = "Items.FirstAidWhiffV0" }, -- no price: the game's own price is used
+    } })
+end
+```
 
 ## Stock exchange
 
