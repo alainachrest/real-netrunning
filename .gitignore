@@ -1,0 +1,4 @@
+# per-save data written in-game
+bin/x64/plugins/cyber_engine_tweaks/mods/real_netrunning/sessions/*
+!bin/x64/plugins/cyber_engine_tweaks/mods/real_netrunning/sessions/.keep
+*.log
