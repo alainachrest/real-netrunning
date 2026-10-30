@@ -35,6 +35,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_scale: Float;
     private let m_floorFit: ref<RNMeshFit>;
     private let m_wallFit: ref<RNMeshFit>;
+    private let m_backFit: ref<RNMeshFit>;   // solid backing behind floors and ceilings
 
     // the size and kind of each block Lua asked for, looked up when it's built
     private let m_pending: Vector4;  // half x, half y, half z, kind
@@ -53,6 +54,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
         this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");
+        this.m_backFit = this.LoadFit(RNBackingMesh(), 0, n"OnBackingMeshLoaded");
         GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnBlockExtract")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
@@ -90,9 +92,38 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         }
     }
 
+    private cb func OnBackingMeshLoaded(token: ref<ResourceToken>) {
+        this.Fill(this.m_backFit, token);
+    }
+
     // Lua waits for this before building (it gives up after a few seconds).
     public func FloorReady() -> Bool {
-        return IsDefined(this.m_floorFit) && this.m_floorFit.ready && IsDefined(this.m_wallFit) && this.m_wallFit.ready;
+        return IsDefined(this.m_floorFit) && this.m_floorFit.ready && IsDefined(this.m_wallFit) && this.m_wallFit.ready
+            && IsDefined(this.m_backFit) && this.m_backFit.ready;
+    }
+
+    // A mesh stretched to fill a box (half extents hx, hy, hz) centred at (x, y, z) in the entity.
+    private func FitMesh(template: ref<EntityBuilderTemplateWrapper>, fit: ref<RNMeshFit>, path: ResRef,
+                         x: Float, y: Float, z: Float, hx: Float, hy: Float, hz: Float) {
+        if !IsDefined(fit) || !fit.ready {
+            return;
+        }
+        let sx = hx * 2.0 / MaxF(0.01, fit.max.X - fit.min.X);
+        let sy = hy * 2.0 / MaxF(0.01, fit.max.Y - fit.min.Y);
+        let sz = hz * 2.0 / MaxF(0.01, fit.max.Z - fit.min.Z);
+        let cx = (fit.max.X + fit.min.X) / 2.0;
+        let cy = (fit.max.Y + fit.min.Y) / 2.0;
+        let cz = (fit.max.Z + fit.min.Z) / 2.0;
+        let mesh = new MeshComponent();
+        mesh.mesh *= path;
+        mesh.meshAppearance = n"default";
+        mesh.visualScale = Vector3(sx, sy, sz);
+        let place: WorldTransform;
+        WorldTransform.SetPosition(place, Vector4(x - cx * sx, y - cy * sy, z - cz * sz, 1.0));
+        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        mesh.localTransform = place;
+        mesh.isEnabled = true;
+        template.AddComponent(mesh);
     }
 
     private func SizeText(fit: ref<RNMeshFit>) -> String {
@@ -106,7 +137,8 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // For 'cyber debug'.
     public func FloorMeshSize() -> String {
-        return "floor " + this.SizeText(this.m_floorFit) + ", wall " + this.SizeText(this.m_wallFit);
+        return "floor " + this.SizeText(this.m_floorFit) + ", wall " + this.SizeText(this.m_wallFit) +
+            ", backing " + this.SizeText(this.m_backFit);
     }
 
     // --- blocks --------------------------------------------------------------------
@@ -231,6 +263,16 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         visual.isEnabled = true;
         template.AddComponent(visual);
 
+        // Floors and ceilings get a solid backing just behind their face, a little
+        // larger than the room, so nothing shows through gaps in the mesh or at
+        // the seams with the walls.
+        if kind == 0 {
+            this.FitMesh(template, this.m_backFit, RNBackingMesh(), 0.0, 0.0, -0.1, size.X + 0.6, size.Y + 0.6, size.Z - 0.05);
+        }
+        if kind == 2 {
+            this.FitMesh(template, this.m_backFit, RNBackingMesh(), 0.0, 0.0, 0.1, size.X + 0.6, size.Y + 0.6, size.Z - 0.05);
+        }
+
         // Wall meshes are only drawn from one side, so walls get a second copy
         // turned round (180 degrees about the vertical), back to back.
         if kind == 1 {
@@ -345,6 +387,11 @@ public func RNFloorMesh(i: Int32) -> ResRef {
     if i == 4 { return r"base\\environment\\architecture\\_temp\\cyberspace\\cyberspace_module_a.mesh"; }
     if i == 5 { return r"base\\environment\\quests\\q101_cyberspace\\q101_cyberspace_deco_a.mesh"; }
     return r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
+}
+
+// A plain solid box from the game's level design kit, for backing.
+public func RNBackingMesh() -> ResRef {
+    return r"base\\environment\\ld_kit\\box_1_1_1_snappoints.mesh";
 }
 
 public func RNWallStyleCount() -> Int32 { return 6; }

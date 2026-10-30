@@ -337,15 +337,12 @@ local function refreshGates()
 			local yaw = door.along == "x" and 0 or 90
 			local barrier = World.spawnBlock(door.x, door.y, door.z + Kit.wallHeight / 2, yaw,
 				Kit.doorWidth / 2 + 0.2, Kit.wallThickness, Kit.wallHeight / 2, 1)
-			local template = lock.kind == "black" and Kit.templates.blackIceGate or Kit.templates.iceGate
-			local look = World.spawnProp(template, door.x, door.y, door.z, yaw)
-			floor.gate = { barrier = barrier, look = look }
+			floor.gate = { barrier = barrier }
 			if floor.gateUse then
 				floor.gateObject = addObject(i, "gate", floor.gateUse.x, floor.gateUse.y, floor.z, "Sealed doorway")
 			end
 		elseif not lock and floor.gate ~= nil then
 			World.despawnProp(floor.gate.barrier)
-			World.despawnProp(floor.gate.look)
 			floor.gate = nil
 			if floor.gateObject then floor.gateObject.kind = "spent" floor.gateObject = nil end
 			if #floor.ice > 0 then
@@ -385,10 +382,7 @@ local function clear()
 		for _, id in ipairs(floor.props) do World.despawnProp(id) end
 		for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 		for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
-		if floor.gate then
-			World.despawnProp(floor.gate.barrier)
-			World.despawnProp(floor.gate.look)
-		end
+		if floor.gate then World.despawnProp(floor.gate.barrier) end
 	end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
 	if Cyber.agentNPC then World.deleteNPC(Cyber.agentNPC) end
