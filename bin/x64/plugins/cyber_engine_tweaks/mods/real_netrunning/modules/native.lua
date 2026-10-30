@@ -5,6 +5,7 @@
 local Shell = require("modules/shell")
 local Network = require("modules/network")
 local World = require("modules/world")
+local Rng = require("modules/rng")
 
 local Native = {
 	service = nil,
@@ -15,6 +16,7 @@ local Native = {
 	log = print,
 	missingLogged = false,
 	machines = {},    -- desktop key -> network addr
+	addrOwner = {},   -- network addr -> desktop key
 	findTimer = 0,
 }
 
@@ -88,8 +90,35 @@ end
 -- Computer desktops (r6/scripts/RealNetrunning/Desktop.reds)
 ---------------------------------------------------------------------------
 
+-- Night City districts, as they appear in the game's world paths.
+local districts = {
+	"watson", "westbrook", "city_center", "heywood", "santo_domingo", "pacifica",
+	"dogtown", "badlands", "northside", "kabuki", "japantown", "charter_hill",
+	"vista_del_rey", "glen", "wellsprings", "rancho_coronado", "arroyo", "corpo_plaza",
+	"downtown", "little_china", "coastview", "west_wind",
+}
+
+-- A short, readable address for a computer, e.g. "watson.pc-3f9a" or "home.pc-81c0".
+-- Computer IDs are long world paths; the hash keeps each address unique and stable.
 local function machineAddr(key)
-	return "computer." .. tostring(key):gsub("[^%w_%-]", "_")
+	key = tostring(key)
+	local lower = key:lower()
+	local area = "nc"
+	if lower:find("v_room", 1, true) or lower:find("v_apartment", 1, true) then
+		area = "home"
+	else
+		for _, d in ipairs(districts) do
+			if lower:find(d, 1, true) then area = d:gsub("_", "") break end
+		end
+	end
+	local addr = string.format("%s.pc-%04x", area, Rng.hash(key) % 65536)
+	-- in the rare case two computers hash the same, add more of the hash
+	local taken = Native.addrOwner[addr]
+	if taken and taken ~= key then
+		addr = string.format("%s.pc-%08x", area, Rng.hash(key))
+	end
+	Native.addrOwner[addr] = key
+	return addr
 end
 
 -- Flattens a network's generated filesystem into (path, text) pairs.
@@ -149,6 +178,7 @@ end
 -- The world is rebuilt on every save load, so computers re-register on request.
 function Native.onWorldRebuilt()
 	Native.machines = {}
+	Native.addrOwner = {}
 end
 
 function Native.isOpen()
