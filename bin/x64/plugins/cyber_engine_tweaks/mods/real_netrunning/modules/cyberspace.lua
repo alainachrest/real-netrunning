@@ -128,6 +128,10 @@ end
 local function prop(list, path, x, y, z, yaw)
 	Cyber.propsAsked = (Cyber.propsAsked or 0) + 1
 	local id = World.spawnProp(path, x, y, z, yaw or 0)
+	if id == nil then
+		Cyber.failedProps = Cyber.failedProps or {}
+		Cyber.failedProps[path:match("([^\\]+)$") or path] = true
+	end
 	if id ~= nil then table.insert(list, id) end
 	return id
 end
@@ -296,7 +300,7 @@ function Cyber.jackIn()
 	for _, effect in ipairs(Kit.restrictions) do World.applyStatusEffect(effect) end
 	World.setJackedIn(true)
 	Cyber.closeDeck()
-	Cyber.tilesAsked, Cyber.propsAsked, World.lastError = 0, 0, nil
+	Cyber.tilesAsked, Cyber.propsAsked, World.lastError, Cyber.failedProps = 0, 0, nil, {}
 	build()
 	emit("cyber.jackin", { addr = addr })
 	return true, "Jacking in to " .. net.name .. "..."
@@ -669,6 +673,9 @@ function Cyber.debug()
 		", entities " .. withEntity .. ", with collider " .. withCollider)
 	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()))
+	local failed = {}
+	for name in pairs(Cyber.failedProps or {}) do table.insert(failed, name) end
+	if #failed > 0 then table.insert(lines, "props that didn't spawn: " .. table.concat(failed, ", ")) end
 	if World.lastError then table.insert(lines, "last game error: " .. tostring(World.lastError)) end
 	local falls = 0
 	for _ in ipairs(Cyber.falls or {}) do falls = falls + 1 end

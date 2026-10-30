@@ -40,8 +40,14 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         if !IsDefined(template) {
             return;
         }
+        // The preset name alone leaves the collision masks empty (collides with
+        // nothing), so build the masks from the preset as well.
         let filter = new physicsFilterData();
         filter.preset = n"World Static";
+        let simulation: SimulationFilter;
+        SimulationFilter.SimulationFilter_BuildFromPreset(simulation, n"World Static");
+        filter.simulationFilter = simulation;
+        filter.queryFilter = QueryFilter.ALL();
 
         let box = new physicsColliderBox();
         box.halfExtents = Vector3(4.0, 4.0, 0.5);
