@@ -398,7 +398,6 @@ end
 local function clear()
 	for _, floor in pairs(Cyber.floors) do
 		for _, id in ipairs(floor.tiles) do World.despawnProp(id) end
-		for _, id in ipairs(floor.oldTiles or {}) do World.despawnProp(id) end
 		for _, id in ipairs(floor.props) do World.despawnProp(id) end
 		for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 		for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
@@ -473,7 +472,6 @@ function Cyber.jackOut(reason, quiet)
 	if body then World.teleport(body.x, body.y, body.z + 0.1, body.yaw) end
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
 	World.setJackedIn(false)
-	if (state().sky or 0) > 0 then World.cyberCall("SetSky", 0) end
 	local forced = reason ~= nil and reason ~= "user" and reason ~= "cancelled"
 	if forced and reason ~= "broken" and reason ~= "cancelled" then
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
@@ -522,125 +520,14 @@ local function recover()
 end
 
 ---------------------------------------------------------------------------
--- How cyberspace looks: chosen in game, kept per save
+-- How cyberspace looks (see cyberkit.lua for the settings)
 ---------------------------------------------------------------------------
 
 function Cyber.applyLook()
-	local s = state()
-	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
-	World.cyberCall("SetWallStyle", s.walls or Kit.defaultWalls)
-	World.cyberCall("SetLight", s.light or 1.0, s.lightColour or Kit.defaultLightColour)
-	World.cyberCall("SetFloorScale", s.scale or Kit.defaultScale)
-	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
-end
-
--- The rooms are rebuilt in the current style: the new blocks go in before
--- the old ones go, so V never stands on nothing.
-local function respawnTiles()
-	for _, floor in pairs(Cyber.floors) do
-		local old = floor.tiles
-		floor.tiles = {}
-		for _, s in ipairs(floor.specs or {}) do
-			local id = World.spawnBlock(s.x, s.y, s.z, s.yaw, s.hx, s.hy, s.hz, s.kind)
-			if id ~= nil then table.insert(floor.tiles, id) end
-		end
-		floor.oldTiles = old
-	end
-	Cyber.retireTimer = 1.0
-end
-
-local function listChoices(count, nameOf, current)
-	local lines = {}
-	for i = 0, count - 1 do
-		table.insert(lines, (i == current and "> " or "  ") .. i .. ". " .. tostring(nameOf(i)))
-	end
-	return table.concat(lines, "\n")
-end
-
--- 'cyber style [n]': which of the game's meshes the floor is drawn with.
-function Cyber.style(n)
-	local s = state()
-	local count = World.cyberCall("FloorStyleCount") or 0
-	if count == 0 then return false, "Cyberspace styles need the r6 scripts." end
-	if n == nil then
-		return true, "Floor styles ('cyber style <number>'):\n" ..
-			listChoices(count, function(i) return World.cyberCall("FloorStyleName", i) end, s.style or Kit.defaultStyle)
-	end
-	n = math.floor(tonumber(n) or -1)
-	if n < 0 or n >= count then return false, "Pick a style from 0 to " .. (count - 1) .. "." end
-	s.style = n
-	World.cyberCall("SetFloorStyle", n)
-	if Cyber.active then Cyber.restyleTimer = 4.0 end
-	return true, "Floor style: " .. tostring(World.cyberCall("FloorStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
-end
-
--- 'cyber walls [n]': which of the game's meshes the walls are drawn with.
-function Cyber.walls(n)
-	local s = state()
-	local count = World.cyberCall("WallStyleCount") or 0
-	if count == 0 then return false, "Cyberspace styles need the r6 scripts." end
-	if n == nil then
-		return true, "Wall styles ('cyber walls <number>'):\n" ..
-			listChoices(count, function(i) return World.cyberCall("WallStyleName", i) end, s.walls or Kit.defaultWalls)
-	end
-	n = math.floor(tonumber(n) or -1)
-	if n < 0 or n >= count then return false, "Pick a wall style from 0 to " .. (count - 1) .. "." end
-	s.walls = n
-	World.cyberCall("SetWallStyle", n)
-	if Cyber.active then Cyber.restyleTimer = 4.0 end
-	return true, "Wall style: " .. tostring(World.cyberCall("WallStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
-end
-
--- 'cyber light [brightness] [colour]': how the rooms are lit. Brightness 1 is
--- normal, 0 is off; colour is a number from the list.
-function Cyber.light(level, colour)
-	local s = state()
-	local count = World.cyberCall("LightColourCount") or 0
-	if count == 0 then return false, "Cyberspace lighting needs the r6 scripts." end
-	if level == nil then
-		return true, "Brightness " .. (s.light or 1.0) .. ". 'cyber light <brightness> [colour]', brightness 1 is normal.\nColours:\n" ..
-			listChoices(count, function(i) return World.cyberCall("LightColourName", i) end, s.lightColour or Kit.defaultLightColour)
-	end
-	level = tonumber(level)
-	if level == nil or level < 0 then return false, "Give a brightness of 0 or more, like 0.5 or 2." end
-	s.light = math.min(10, level)
-	if colour ~= nil then
-		colour = math.floor(tonumber(colour) or -1)
-		if colour < 0 or colour >= count then return false, "Pick a colour from 0 to " .. (count - 1) .. "." end
-		s.lightColour = colour
-	end
-	World.cyberCall("SetLight", s.light, s.lightColour or Kit.defaultLightColour)
-	if Cyber.active then Cyber.restyleTimer = 0.1 end
-	return true, "Lights: brightness " .. s.light .. ", " .. tostring(World.cyberCall("LightColourName", s.lightColour or Kit.defaultLightColour)) ..
-		(Cyber.active and "" or " (next time you jack in)")
-end
-
--- 'cyber scale [x]': resize the floor mesh, if a style comes out too big or small.
-function Cyber.scale(x)
-	local s = state()
-	if x == nil then return true, "Floor scale: " .. (s.scale or Kit.defaultScale) .. ". 'cyber scale <number>', 1 is normal." end
-	x = tonumber(x)
-	if x == nil or x <= 0 then return false, "Give a number above 0, like 0.5 or 2." end
-	s.scale = math.max(0.05, math.min(20, x))
-	World.cyberCall("SetFloorScale", s.scale)
-	if Cyber.active then respawnTiles() end
-	return true, "Floor scale: " .. s.scale
-end
-
--- 'cyber sky [n]': weather while jacked in, put back on jack-out.
-function Cyber.sky(n)
-	local s = state()
-	local count = World.cyberCall("SkyCount") or 0
-	if count == 0 then return false, "Cyberspace skies need the r6 scripts." end
-	if n == nil then
-		return true, "Skies ('cyber sky <number>'):\n" ..
-			listChoices(count, function(i) return World.cyberCall("SkyName", i) end, s.sky or 0)
-	end
-	n = math.floor(tonumber(n) or -1)
-	if n < 0 or n >= count then return false, "Pick a sky from 0 to " .. (count - 1) .. "." end
-	s.sky = n
-	if Cyber.active then World.cyberCall("SetSky", n) end
-	return true, "Sky: " .. tostring(World.cyberCall("SkyName", n)) .. (Cyber.active and "" or " (next time you jack in)")
+	World.cyberCall("SetFloorStyle", Kit.defaultStyle)
+	World.cyberCall("SetWallStyle", Kit.defaultWalls)
+	World.cyberCall("SetLight", Kit.lightLevel, Kit.defaultLightColour)
+	World.cyberCall("SetFloorScale", Kit.defaultScale)
 end
 
 ---------------------------------------------------------------------------
@@ -953,25 +840,6 @@ function Cyber.update(dt)
 		if not (lock and lock.kind == "black") then
 			Cyber.jackOut("health")
 			return
-		end
-	end
-
-	if Cyber.restyleTimer then
-		Cyber.restyleTimer = Cyber.restyleTimer - dt
-		if World.cyberCall("FloorReady") == true or Cyber.restyleTimer <= 0 then
-			Cyber.restyleTimer = nil
-			respawnTiles()
-		end
-	end
-
-	if Cyber.retireTimer then
-		Cyber.retireTimer = Cyber.retireTimer - dt
-		if Cyber.retireTimer <= 0 then
-			Cyber.retireTimer = nil
-			for _, floor in pairs(Cyber.floors) do
-				for _, id in ipairs(floor.oldTiles or {}) do World.despawnProp(id) end
-				floor.oldTiles = nil
-			end
 		end
 	end
 

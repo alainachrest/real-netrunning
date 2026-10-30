@@ -9,7 +9,6 @@
 //    Each is the game's own empty entity with a static box collider (so V can
 //    stand on it and can't walk through it) and one of the game's cyberspace
 //    meshes, measured when it loads and stretched to fit the box.
-//  * The sky while jacked in.
 //  * Saving: manual and quick saves are blocked while V is jacked in.
 
 module RealNetrunning
@@ -378,42 +377,6 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_scale = MaxF(0.05, MinF(scale, 20.0));
     }
     public func GetFloorScale() -> Float { return this.m_scale; }
-
-    // Sky presets while jacked in ('cyber sky'). 0 puts the normal weather back.
-    public func SkyCount() -> Int32 { return 6; }
-    public func SkyName(i: Int32) -> String {
-        if i == 1 {
-            return "Fog";
-        }
-        if i == 2 {
-            return "Heavy clouds";
-        }
-        if i == 3 {
-            return "Toxic rain";
-        }
-        if i == 4 {
-            return "Pollution";
-        }
-        if i == 5 {
-            return "Deep blue";
-        }
-        return "Normal weather";
-    }
-    public func SetSky(i: Int32) -> Bool {
-        let weather = GameInstance.GetWeatherSystem(GetGameInstance());
-        if !IsDefined(weather) {
-            return false;
-        }
-        if i <= 0 {
-            return weather.ResetWeather(true, 3.0);
-        }
-        let name = n"24h_weather_fog";
-        if i == 2 { name = n"24h_weather_heavy_clouds"; }
-        if i == 3 { name = n"24h_weather_toxic_rain"; }
-        if i == 4 { name = n"24h_weather_pollution"; }
-        if i == 5 { name = n"q302_deeb_blue"; }
-        return weather.SetWeather(name, 3.0, 9u);
-    }
 
     public func SetJackedIn(on: Bool) {
         this.m_jackedIn = on;
