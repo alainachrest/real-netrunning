@@ -24,7 +24,11 @@ local NetWatch = require("modules/netwatch")
 
 local Cyber = {
 	active = false,
-	phase = nil,        -- "entering" while the platforms spawn, then "in"
+	phase = nil,        -- "entering" while the platforms spawn, "moving" until V arrives, then "in"
+	target = nil,       -- where V was last sent: { x, y, z, yaw }
+	arrived = false,    -- V has been seen at the target
+	moveTimer = 0,
+	toldToStepAway = false,
 	enterTimer = 0,
 	addr = nil,
 	floor = 1,
@@ -48,6 +52,7 @@ local Cyber = {
 	connected = function() return nil end,
 	setCwd = function() end,
 	openDeck = function() end,
+	closeDeck = function() end,
 	random = nil,
 }
 
@@ -256,7 +261,9 @@ local function moveToFloor(i, fromBelow)
 	else
 		x, y, z = Cyber.arrivalPoint(i)
 	end
-	World.teleport(x, y, z + 0.2, fromBelow and 180 or 0)
+	Cyber.target = { x = x, y = y, z = z + 0.2, yaw = fromBelow and 180 or 0 }
+	Cyber.arrived, Cyber.moveTimer = false, 0
+	World.teleport(Cyber.target.x, Cyber.target.y, Cyber.target.z, Cyber.target.yaw)
 	Cyber.floor = i
 	Cyber.prompt = nil
 	local net = Network.get(Cyber.addr)
@@ -277,6 +284,7 @@ function Cyber.jackIn()
 	if body == nil then return false, "Can't find your body. Load a save first." end
 
 	Cyber.active, Cyber.phase, Cyber.enterTimer = true, "entering", 1.5
+	Cyber.target, Cyber.arrived, Cyber.moveTimer, Cyber.toldToStepAway = nil, false, 0, false
 	Cyber.addr, Cyber.body, Cyber.floor = addr, body, 1
 	Cyber.bodySafe = addr:sub(1, 5) == "home."
 	Cyber.danger, Cyber.dangerTimer, Cyber.falls, Cyber.prompt = nil, 0, {}, nil
@@ -298,8 +306,8 @@ function Cyber.jackOut(reason, quiet)
 	if body then World.teleport(body.x, body.y, body.z + 0.1, body.yaw) end
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
 	World.setJackedIn(false)
-	local forced = reason ~= nil and reason ~= "user"
-	if forced and reason ~= "broken" then
+	local forced = reason ~= nil and reason ~= "user" and reason ~= "cancelled"
+	if forced and reason ~= "broken" and reason ~= "cancelled" then
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
 	end
 	local addr = Cyber.addr
@@ -313,6 +321,7 @@ function Cyber.jackOut(reason, quiet)
 		body = "Someone yanked your cable. You come to on the floor.",
 		disconnected = "The connection drops and cyberspace with it.",
 		broken = "Cyberspace couldn't hold together here. Jacked out.",
+		cancelled = "Jack-in cancelled.",
 	}
 	local text = messages[reason] or "Jacked out."
 	if not quiet then
@@ -539,11 +548,8 @@ function Cyber.update(dt)
 	if Cyber.phase == "entering" then
 		Cyber.enterTimer = Cyber.enterTimer - dt
 		if Cyber.enterTimer <= 0 then
-			Cyber.phase = "in"
+			Cyber.phase = "moving"
 			moveToFloor(1, false)
-			local net = Network.get(Cyber.addr)
-			say("You're in " .. net.name .. ". " .. #Network.floors(net) .. " floors below you.", "ok")
-			World.notify("Cyberspace: " .. net.name)
 		end
 		return
 	end
@@ -555,7 +561,44 @@ function Cyber.update(dt)
 	end
 
 	local pos = World.playerTransform()
-	if pos then
+	if pos == nil then return end
+
+	-- Has V actually got where they were sent? The game won't move V while
+	-- they're using a computer screen or similar, so keep trying until it does.
+	if not Cyber.arrived then
+		local t = Cyber.target
+		if t and math.abs(pos.x - t.x) < 4 and math.abs(pos.y - t.y) < 4 and math.abs(pos.z - t.z) < 4 then
+			Cyber.arrived = true
+			if Cyber.phase == "moving" then
+				Cyber.phase = "in"
+				Cyber.closeDeck()
+				local net = Network.get(Cyber.addr)
+				say("You're in " .. net.name .. ". " .. #Network.floors(net) .. " floors below you.", "ok")
+				World.notify("Cyberspace: " .. net.name)
+			end
+		else
+			Cyber.moveTimer = Cyber.moveTimer + dt
+			if Cyber.moveTimer >= 1.5 then
+				Cyber.moveTimer = 0
+				Cyber.waited = (Cyber.waited or 0) + 1.5
+				if Cyber.phase == "moving" and not Cyber.toldToStepAway then
+					Cyber.toldToStepAway = true
+					say("Your deck is ready. Step away from the screen to finish jacking in.", "warn")
+					World.notify("Step away from the screen to jack in")
+				end
+				if Cyber.waited >= 60 then
+					Cyber.waited = 0
+					Cyber.jackOut("cancelled")
+					return
+				end
+				if t then World.teleport(t.x, t.y, t.z, t.yaw) end
+			end
+			return
+		end
+		Cyber.waited = 0
+	end
+
+	do
 		-- fell off: put V back, and give up if the floors aren't holding
 		local floor = Cyber.floors[Cyber.floor]
 		if floor and pos.z < floor.z - Kit.fallLimit then
