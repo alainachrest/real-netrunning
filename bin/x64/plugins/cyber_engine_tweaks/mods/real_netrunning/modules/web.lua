@@ -29,6 +29,7 @@ local Network = require("modules/network")
 local Lore = require("modules/lore")
 local Market = require("modules/market")
 local World = require("modules/world")
+local NetWatch = require("modules/netwatch")
 
 local Web = {}
 
@@ -101,6 +102,7 @@ function Page:portalNav()
 	self:nav("Directory", "nc://directory")
 	self:nav("Exchange", "market://")
 	self:nav("News", "nc://news")
+	self:nav("NetWatch", "nc://netwatch")
 	return self
 end
 
@@ -174,6 +176,24 @@ local function news()
 	local items = Network.state.news
 	if #items == 0 then p:text("Quiet day in Night City.", YELLOW) end
 	for i = #items, math.max(1, #items - 20), -1 do p:card(items[i], "", "", RED) end
+	return p
+end
+
+local function netwatchPage()
+	local tier = NetWatch.tier()
+	local heat = Network.state.heat
+	local colors = { GREEN, YELLOW, RED, RED }
+	local p = page("NetWatch", "nc://netwatch", RED)
+	p:banner("NETWATCH", "Keeping the Net safe since the DataKrash", RED)
+	p:portalNav()
+	p:heading("Public bulletin: unidentified netrunner")
+	p:field("Threat level", NetWatch.tierName(tier), colors[tier + 1])
+	p:field("Heat", heat .. " / 100", colors[tier + 1])
+	p:field("Agents lost", tostring(NetWatch.defeated()))
+	p:card("WATCHED  (25+)", "Agents sometimes trace into networks the suspect enters.", "", YELLOW)
+	p:card("HUNTED  (50+)", "Agents are assigned on sight. Field netrunners may engage the suspect in public.", "", RED)
+	p:card("BURNED  (75+)", "All of the above. NCPD has been notified.", "", RED)
+	p:text("Citizens with information should report it at any public terminal. NetWatch thanks you for your cooperation.", YELLOW)
 	return p
 end
 
@@ -369,6 +389,7 @@ function Web.render(url)
 	if url == "" or url == "nc://home" or url == "home" then return home() end
 	if url == "nc://directory" then return directory() end
 	if url == "nc://news" then return news() end
+	if url == "nc://netwatch" then return netwatchPage() end
 	local query = url:match("^nc://search%?q=(.*)$")
 	if query then return search(query) end
 	local addr = url:match("^net://(.+)$")

@@ -53,7 +53,10 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `jack` | Jack into the device you're looking at. Devices wired to an access point join its whole network |
 | `devices` | List the real devices on an access point network (once its control floor is open) |
 | `device <number> <action>` | Control one of them (doors: open, close, lock, unlock; cameras and turrets: on, off). On a single device, just `device <action>` |
-| `status` | Deck power, trace and NetWatch heat |
+| `fight` | Fight a NetWatch agent that has entered your network |
+| `scrub` | Wipe your traces from a network you have root on, lowering heat (once per network) |
+| `netwatch` | Threat level, heat and agents derezzed. `netwatch world off` stops attacks on V outside the Net |
+| `status` | Deck power, trace, NetWatch heat and threat level |
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
@@ -63,6 +66,21 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.
+
+## NetWatch
+
+Heat now has consequences. Your threat level shows in `status`, `netwatch`, and on the `nc://netwatch` site.
+
+| Heat | Threat | What happens |
+| --- | --- | --- |
+| 0–24 | CLEAR | Nothing |
+| 25–49 | WATCHED | Counter-netrunners sometimes trace into networks you're connected to |
+| 50–74 | HUNTED | Agents come more often, and NetWatch netrunners shock V in the world |
+| 75+ | BURNED | Agents everywhere; NetWatch also tips off the NCPD |
+
+- An agent takes a few seconds to arrive, then attacks your trace until you `fight` it or disconnect. Beating it pays a bounty; losing locks your deck out of breaching for 20 seconds.
+- Attacks in the world only happen while you're not connected. Turn them off with `netwatch world off`.
+- `scrub` on networks you own brings heat back down.
 
 ## Stock exchange
 
@@ -93,7 +111,7 @@ if rn and rn.api and rn.api.apiVersion >= 1 then
 end
 ```
 
-Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `network.revealed`, `network.breached`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
+Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `netwatch.tier`, `netwatch.agent_spawn`, `netwatch.agent_arrived`, `netwatch.agent_defeated`, `netwatch.agent_won`, `netwatch.world_attack`, `network.revealed`, `network.breached`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
 
 ## Credits
 

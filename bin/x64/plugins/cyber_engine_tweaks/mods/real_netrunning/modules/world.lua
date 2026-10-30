@@ -54,6 +54,24 @@ function World.spendMoney(amount)
 	return ok == true
 end
 
+-- Applies one of the game's status effects to V, e.g. "BaseStatusEffect.PlayerElectrocuted".
+function World.applyStatusEffect(effect)
+	return try(function()
+		local player = Game.GetPlayer()
+		Game.GetStatusEffectSystem():ApplyStatusEffect(player:GetEntityID(), TweakDBID.new(effect))
+		return true
+	end)
+end
+
+-- Tips off the NCPD: the same request the game makes when a crime is witnessed.
+function World.reportToPolice()
+	return try(function()
+		local player = Game.GetPlayer()
+		PreventionSystem.CrimeWitnessRequestToPreventionSystem(player:GetGame(), player:GetWorldPosition())
+		return true
+	end)
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

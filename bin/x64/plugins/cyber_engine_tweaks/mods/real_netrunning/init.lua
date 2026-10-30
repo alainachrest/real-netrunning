@@ -21,6 +21,7 @@ local Bridge = require("modules/cyberscript")
 local Native = require("modules/native")
 local Market = require("modules/market")
 local Web = require("modules/web")
+local NetWatch = require("modules/netwatch")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -42,6 +43,9 @@ Bridge.log = log
 Native.log = log
 Network.bus = Bus
 Shell.bus = Bus
+NetWatch.bus = Bus
+NetWatch.print = Shell.print
+NetWatch.addTrace = function(amount) Shell.addTrace(amount) end
 Bridge.bus = Bus
 
 ---------------------------------------------------------------------------
@@ -63,6 +67,7 @@ local function startWorld()
 	Network.state = Persisted
 	Network.build()
 	Shell.reset()
+	NetWatch.reset()
 	Bridge.onWorldRebuilt()
 	Native.onWorldRebuilt()
 	RealNetrunning.ready = true
@@ -118,6 +123,7 @@ registerForEvent("onUpdate", function(dt)
 	if RealNetrunning.ready then
 		Native.update(dt)
 		Shell.update(dt)
+		NetWatch.update(dt, Shell.connected)
 		Market.update(dt)
 	end
 end)

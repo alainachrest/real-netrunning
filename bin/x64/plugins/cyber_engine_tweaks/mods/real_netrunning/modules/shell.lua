@@ -5,6 +5,7 @@ local Lore = require("modules/lore")
 local World = require("modules/world")
 local Market = require("modules/market")
 local Rng = require("modules/rng")
+local NetWatch = require("modules/netwatch")
 
 local Shell = {
 	lines = {},        -- { text, kind } kind = "out" | "cmd" | "ok" | "warn" | "err"
@@ -52,6 +53,7 @@ end
 local function disconnect(reason)
 	if not Shell.connected then return end
 	emit("hack.disconnected", { addr = Shell.connected, reason = reason })
+	NetWatch.onDisconnect()
 	Shell.connected, Shell.cwd, Shell.trace, Shell.job = nil, "/", 0, nil
 end
 
@@ -68,6 +70,8 @@ local function addTrace(amount)
 		disconnect("traced")
 	end
 end
+
+Shell.addTrace = addTrace
 
 ---------------------------------------------------------------------------
 -- Commands
@@ -100,7 +104,9 @@ local function progress(net)
 end
 
 def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
-	out("Deck power: " .. World.deckPower() .. "   NetWatch heat: " .. Network.state.heat .. "/100")
+	out("Deck power: " .. World.deckPower() .. "   NetWatch heat: " .. Network.state.heat .. "/100 (" .. NetWatch.tierName() .. ")")
+	if NetWatch.lockout > 0 then out("Deck locked out for " .. math.ceil(NetWatch.lockout) .. "s.", "err") end
+	if NetWatch.agent then out("Agent in the network: " .. NetWatch.agent.name .. " (level " .. NetWatch.agent.level .. ")", "err") end
 	local net = current()
 	if net then
 		out("Connected: " .. net.addr .. " (" .. net.name .. ")")
@@ -173,6 +179,7 @@ end
 def("breach", "breach", "Break the ICE on the next locked floor.", function()
 	local net = current()
 	if net == nil then out("Connect to a network first.", "err") return end
+	if NetWatch.lockout > 0 then out("Your deck is still rebooting (" .. math.ceil(NetWatch.lockout) .. "s).", "err") return end
 	if Shell.job then out("A breach is already running.", "err") return end
 	local index, f = Network.nextLock(net.addr)
 	if index == nil then out("You already have root here.") return end
@@ -206,6 +213,7 @@ end)
 def("crack", "crack", "Brute-force the password gate ahead (slow, raises trace).", function()
 	local net = current()
 	if net == nil then out("Connect to a network first.", "err") return end
+	if NetWatch.lockout > 0 then out("Your deck is still rebooting (" .. math.ceil(NetWatch.lockout) .. "s).", "err") return end
 	if Shell.job then out("A job is already running.", "err") return end
 	local index, f = Network.nextLock(net.addr)
 	if index == nil or f.kind ~= "password" then out("There's no password gate ahead.") return end
@@ -416,6 +424,32 @@ def("device", "device [number] <action>", "Control a device on this network.", f
 	if ok then
 		emit("device.action", { kind = target.kind, action = action, addr = net.addr })
 	end
+end)
+
+def("fight", "fight", "Fight the NetWatch agent in this network.", function()
+	local ok, msg = NetWatch.fight()
+	out(msg, ok and "ok" or "err")
+end)
+
+def("scrub", "scrub", "Wipe your traces from a network you own (lowers heat, once each).", function()
+	local net = needConnection() if not net then return end
+	local ok, msg = NetWatch.scrub(net.addr)
+	out(msg, ok and "ok" or "err")
+end)
+
+def("netwatch", "netwatch [world on|off]", "Your NetWatch threat level; turn world attacks on or off.", function(args)
+	if args[1] == "world" and (args[2] == "on" or args[2] == "off") then
+		NetWatch.setWorldEffects(args[2] == "on")
+		out("NetWatch attacks in the world are now " .. args[2] .. ".", "ok")
+		return
+	end
+	local heat = Network.state.heat
+	out("Threat level: " .. NetWatch.tierName() .. " (heat " .. heat .. "/100)", NetWatch.tier() >= 2 and "err" or "ok")
+	out("  WATCHED at 25: agents sometimes trace into networks you're in.")
+	out("  HUNTED at 50: agents come often, and NetWatch netrunners hack you in the street.")
+	out("  BURNED at 75: NetWatch also tips off the NCPD.")
+	out("Agents derezzed: " .. NetWatch.defeated() .. ".   World attacks: " .. (NetWatch.worldEffects() and "on" or "off") .. ".")
+	out("Heat cools by 1 a minute. 'scrub' on a network you own lowers it faster.")
 end)
 
 def("news", "news", "Recent events across Night City's nets.", function()
