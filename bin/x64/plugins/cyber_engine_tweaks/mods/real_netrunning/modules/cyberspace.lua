@@ -75,21 +75,24 @@ local function centre(i)
 	return Kit.origin.x, Kit.origin.y, Kit.origin.z - (i - 1) * Kit.floorGap
 end
 
--- The rooms of floor i: a grid of cells, a spanning tree of doorways (so every
--- room can be reached) and the odd extra doorway for loops. The way down is
--- in the room furthest from where V arrives, behind a single doorway that
--- seals while the floor below is locked. The same for every visit to a network.
+-- The rooms of floor i. A branching maze (randomised Prim's algorithm: it grows
+-- out in many directions, leaving side passages and dead ends), then extra
+-- doorways for loops, so there's usually more than one way through. The way
+-- down is in the room furthest from where V arrives, behind a single doorway
+-- that seals while the floor below is locked. Dead-end rooms are where data
+-- tends to be. The same for every visit to a network.
 function Cyber.layout(net, i, f)
 	local rng = Rng.new(Network.state.seed or 0, "rooms", net.addr, i)
 	local big = net.ice >= 4 or net.tier >= 2
-	local w = (f.kind == "lobby" or f.kind == "core") and 2 or (big and 3 or 2)
-	local h = (f.kind == "files" or f.kind == "control" or big) and 3 or 2
+	local base = (f.kind == "files" or f.kind == "control") and 4 or 3
+	if big then base = base + 1 end
+	local w = math.min(5, base)
+	local h = math.min(5, base + rng:int(0, 1))
 	local doors = {}
 	local function key(ax, ay, bx, by)
 		if ax > bx or (ax == bx and ay > by) then ax, ay, bx, by = bx, by, ax, ay end
 		return ax .. "," .. ay .. "|" .. bx .. "," .. by
 	end
-	local visited, depth, parent, degree = {}, {}, {}, {}
 	local function id(x, y) return x .. "," .. y end
 	local function neighbours(x, y)
 		local list = {}
@@ -99,47 +102,85 @@ function Cyber.layout(net, i, f)
 		end
 		return list
 	end
-	-- randomised depth-first search from the arrival room
-	local stack = { { 0, 0 } }
-	visited[id(0, 0)], depth[id(0, 0)] = true, 0
-	while #stack > 0 do
-		local top = stack[#stack]
-		local options = {}
-		for _, n in ipairs(neighbours(top[1], top[2])) do
-			if not visited[id(n[1], n[2])] then table.insert(options, n) end
-		end
-		if #options == 0 then
-			table.remove(stack)
-		else
-			local n = options[rng:int(1, #options)]
-			visited[id(n[1], n[2])] = true
-			depth[id(n[1], n[2])] = depth[id(top[1], top[2])] + 1
-			parent[id(n[1], n[2])] = { top[1], top[2] }
-			doors[key(top[1], top[2], n[1], n[2])] = true
-			degree[id(top[1], top[2])] = (degree[id(top[1], top[2])] or 0) + 1
-			degree[id(n[1], n[2])] = (degree[id(n[1], n[2])] or 0) + 1
-			table.insert(stack, n)
+	local degree = {}
+	local function connect(ax, ay, bx, by)
+		doors[key(ax, ay, bx, by)] = true
+		degree[id(ax, ay)] = (degree[id(ax, ay)] or 0) + 1
+		degree[id(bx, by)] = (degree[id(bx, by)] or 0) + 1
+	end
+
+	-- V arrives somewhere along one edge of the floor
+	local start = { rng:int(0, w - 1), 0 }
+	local inMaze, parent = { [id(start[1], start[2])] = true }, {}
+	local frontier = {}
+	local function addFrontier(x, y)
+		for _, n in ipairs(neighbours(x, y)) do
+			if not inMaze[id(n[1], n[2])] then table.insert(frontier, { n[1], n[2], x, y }) end
 		end
 	end
-	-- the way down: the deepest room with a single doorway
-	local goal, best = { w - 1, h - 1 }, -1
+	addFrontier(start[1], start[2])
+	while #frontier > 0 do
+		local pick = table.remove(frontier, rng:int(1, #frontier))
+		local x, y, fx, fy = pick[1], pick[2], pick[3], pick[4]
+		if not inMaze[id(x, y)] then
+			inMaze[id(x, y)] = true
+			parent[id(x, y)] = { fx, fy }
+			connect(fx, fy, x, y)
+			addFrontier(x, y)
+		end
+	end
+
+	-- how far each room is from the start, through the maze
+	local depth = { [id(start[1], start[2])] = 0 }
+	local queue = { start }
+	while #queue > 0 do
+		local c = table.remove(queue, 1)
+		for _, n in ipairs(neighbours(c[1], c[2])) do
+			if doors[key(c[1], c[2], n[1], n[2])] and depth[id(n[1], n[2])] == nil then
+				depth[id(n[1], n[2])] = depth[id(c[1], c[2])] + 1
+				table.insert(queue, n)
+			end
+		end
+	end
+
+	-- the way down: the furthest room with a single doorway
+	local goal, best = nil, -1
 	for x = 0, w - 1 do
 		for y = 0, h - 1 do
 			local d = depth[id(x, y)] or 0
-			if (x ~= 0 or y ~= 0) and (degree[id(x, y)] or 0) == 1 and d > best then goal, best = { x, y }, d end
+			if (x ~= start[1] or y ~= start[2]) and (degree[id(x, y)] or 0) == 1 and d > best then goal, best = { x, y }, d end
 		end
 	end
-	-- one extra doorway for a loop, never into the goal room
-	if w * h >= 6 then
-		for _ = 1, 8 do
-			local x, y = rng:int(0, w - 1), rng:int(0, h - 1)
-			local n = neighbours(x, y)[rng:int(1, #neighbours(x, y))]
-			local k = key(x, y, n[1], n[2])
-			local touchesGoal = (x == goal[1] and y == goal[2]) or (n[1] == goal[1] and n[2] == goal[2])
-			if not doors[k] and not touchesGoal then doors[k] = true break end
+	goal = goal or { w - 1, h - 1 }
+
+	-- loops: extra doorways (about one for every five rooms), never into the
+	-- goal room, so there's more than one route but still one way in to it
+	local wanted = math.max(1, math.floor(w * h / 5))
+	for _ = 1, wanted * 6 do
+		if wanted <= 0 then break end
+		local x, y = rng:int(0, w - 1), rng:int(0, h - 1)
+		local list = neighbours(x, y)
+		local n = list[rng:int(1, #list)]
+		local touchesGoal = (x == goal[1] and y == goal[2]) or (n[1] == goal[1] and n[2] == goal[2])
+		if not doors[key(x, y, n[1], n[2])] and not touchesGoal then
+			connect(x, y, n[1], n[2])
+			wanted = wanted - 1
 		end
 	end
-	return { w = w, h = h, doors = doors, key = key, start = { 0, 0 }, goal = goal, parent = parent[id(goal[1], goal[2])] }
+
+	-- dead ends: rooms with one doorway (not where V arrives, not the goal)
+	local deadEnds, others = {}, {}
+	for x = 0, w - 1 do
+		for y = 0, h - 1 do
+			local isStart = x == start[1] and y == start[2]
+			local isGoal = x == goal[1] and y == goal[2]
+			if not isStart and not isGoal then
+				table.insert((degree[id(x, y)] or 0) == 1 and deadEnds or others, { x, y })
+			end
+		end
+	end
+	return { w = w, h = h, doors = doors, key = key, start = start, goal = goal, parent = parent[id(goal[1], goal[2])],
+		deadEnds = deadEnds, others = others, depth = depth }
 end
 
 local function cellCentre(i, layout, x, y)
@@ -299,15 +340,10 @@ local function buildFloor(net, i, f, count)
 		floor.gateUse = { x = doorX + (px - doorX) * 0.18, y = doorY + (py - doorY) * 0.18 }
 	end
 
-	-- data objects in the rooms between
+	-- data objects: dead-end rooms first (worth exploring), then the rest
 	local rooms = {}
-	for x = 0, L.w - 1 do
-		for y = 0, L.h - 1 do
-			local isStart = x == L.start[1] and y == L.start[2]
-			local isGoal = x == L.goal[1] and y == L.goal[2]
-			if not isStart and not isGoal then table.insert(rooms, { x, y }) end
-		end
-	end
+	for _, c in ipairs(L.deadEnds) do table.insert(rooms, c) end
+	for _, c in ipairs(L.others) do table.insert(rooms, c) end
 	if #rooms == 0 then rooms = { L.start } end
 	local slots = { { -4, -4 }, { 4, 4 }, { -4, 4 }, { 4, -4 } }
 	local used = {}
@@ -375,6 +411,37 @@ local function refreshGates()
 	end
 end
 
+-- Takes one floor down: its blocks, props, ICE and objects.
+local function unbuildFloor(i)
+	local floor = Cyber.floors[i]
+	if floor == nil then return end
+	for _, id in ipairs(floor.tiles) do World.despawnProp(id) end
+	for _, id in ipairs(floor.props) do World.despawnProp(id) end
+	for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
+	for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
+	if floor.gate then World.despawnProp(floor.gate.barrier) end
+	local kept = {}
+	for _, o in ipairs(Cyber.objects) do
+		if o.floor ~= i then table.insert(kept, o) end
+	end
+	Cyber.objects = kept
+	Cyber.floors[i] = nil
+end
+
+-- Only the floor V is on and the ones directly above and below exist; the
+-- rest are built and taken down as V moves, so big networks stay light.
+function Cyber.ensureFloors(i)
+	local net = Network.get(Cyber.addr)
+	local floors = Network.floors(net)
+	for j in pairs(Cyber.floors) do
+		if math.abs(j - i) > 1 then unbuildFloor(j) end
+	end
+	for j = math.max(1, i - 1), math.min(#floors, i + 1) do
+		if Cyber.floors[j] == nil then buildFloor(net, j, floors[j], #floors) end
+	end
+	refreshGates()
+end
+
 local function build()
 	local net = Network.get(Cyber.addr)
 	local org = Lore.getOrg(net.org)
@@ -391,18 +458,11 @@ local function build()
 			break
 		end
 	end
-	for i, f in ipairs(floors) do buildFloor(net, i, f, #floors) end
-	refreshGates()
+	Cyber.ensureFloors(1)
 end
 
 local function clear()
-	for _, floor in pairs(Cyber.floors) do
-		for _, id in ipairs(floor.tiles) do World.despawnProp(id) end
-		for _, id in ipairs(floor.props) do World.despawnProp(id) end
-		for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
-		for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
-		if floor.gate then World.despawnProp(floor.gate.barrier) end
-	end
+	for i in pairs(Cyber.floors) do unbuildFloor(i) end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
 	if Cyber.agentNPC then World.deleteNPC(Cyber.agentNPC) end
 	World.cyberCall("ForgetBlocks")
@@ -414,6 +474,7 @@ end
 ---------------------------------------------------------------------------
 
 local function moveToFloor(i, fromBelow)
+	Cyber.ensureFloors(i)
 	local x, y, z
 	if fromBelow then
 		x, y, z = descentPoint(i)
