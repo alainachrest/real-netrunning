@@ -130,26 +130,39 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         template.AddComponent(mesh);
     }
 
-    // A point light that fills a room of the given half width with soft colour.
+    // Lights that fill a room of the given half width with soft colour: a main
+    // light under the ceiling and a softer fill light near the floor.
     private func AddLight(template: ref<EntityBuilderTemplateWrapper>, half: Float) {
-        let light = new gameLightComponent();
+        template.AddComponent(this.MakeLight(half * 2.2, 9000.0, 0.0));
+        template.AddComponent(this.MakeLight(half * 1.8, 3000.0, -4.0));
+    }
+
+    private func MakeLight(radius: Float, lumens: Float, z: Float) -> ref<LightComponent> {
+        // the plain light component is always on (the game's gameLightComponent
+        // starts switched off and waits to be turned on, like a lamp)
+        let light = new LightComponent();
         light.type = ELightType.LT_Point;
         light.color = RNLightColour(this.m_lightColour);
         light.unit = ELightUnit.LU_Lumen;
-        light.intensity = 9000.0 * this.m_lightLevel;
-        light.radius = half * 2.2;
+        light.intensity = lumens * this.m_lightLevel;
+        light.radius = radius;
+        light.temperature = -1.0;
         light.attenuation = rendLightAttenuation.LA_InverseSquare;
+        // which surfaces it lights: all of them
+        light.lightChannel = Cast<Uint16>(65535);
         light.sceneDiffuse = true;
         light.sceneSpecularScale = Cast<Uint8>(100);
+        light.scaleGI = Cast<Uint8>(100);
+        light.scaleEnvProbes = Cast<Uint8>(100);
         light.scaleVolFog = Cast<Uint8>(40);
         light.useInTransparents = true;
         light.useInParticles = true;
         light.isEnabled = true;
         let place: WorldTransform;
-        WorldTransform.SetPosition(place, Vector4(0.0, 0.0, 0.0, 1.0));
+        WorldTransform.SetPosition(place, Vector4(0.0, 0.0, z, 1.0));
         WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
         light.localTransform = place;
-        template.AddComponent(light);
+        return light;
     }
 
     public func SetLight(level: Float, colour: Int32) {
