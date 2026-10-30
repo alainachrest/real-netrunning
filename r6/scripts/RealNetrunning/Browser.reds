@@ -75,7 +75,9 @@ public class RNBrowserView {
         tab.SetName(n"tab");
         tab.SetSize(420.0, 44.0);
         tab.SetTranslation(16.0, 60.0);
+        tab.SetInteractive(true);
         tab.Reparent(root);
+        tab.RegisterToCallback(n"OnRelease", this, n"OnTabClick");
         RNImage(n"bg", RNShapes(), n"button_big2_bg", n"MainColors.PanelDarkRed", 0.9).Reparent(tab);
         let accent = RNImage(n"frame", RNShapes(), n"button_big2_fg", n"MainColors.Blue", 1.0);
         accent.Reparent(tab);
@@ -317,6 +319,15 @@ public class RNBrowserView {
         return MaxF(0.0, this.PageHeight() - this.ViewportHeight() + 40.0);
     }
 
+    // The scroll area also reacts to the mouse wheel by itself; keep its own
+    // position at the top so only our offset moves the page.
+    private func PinNativeScroll() {
+        let viewport = this.m_viewport;
+        if IsDefined(viewport) {
+            viewport.ScrollVertical(0.0);
+        }
+    }
+
     // One wheel notch moves the page by step * 45 pixels.
     public func Scroll(step: Int32) {
         this.ScrollTo(this.m_offset + 45.0 * Cast<Float>(step));
@@ -328,6 +339,7 @@ public class RNBrowserView {
             return;
         }
         this.m_offset = MinF(MaxF(0.0, offset), this.MaxOffset());
+        this.PinNativeScroll();
         content.SetTranslation(Vector2(0.0, -this.m_offset));
         this.UpdateScrollbar();
     }
@@ -362,6 +374,7 @@ public class RNBrowserView {
             unit += 1;
         }
         this.m_offset = 0.0;
+        this.PinNativeScroll();
         content.SetTranslation(Vector2(0.0, 0.0));
         this.UpdateScrollbar();
     }
@@ -778,6 +791,14 @@ public class RNBrowserView {
     protected cb func OnReload(e: ref<inkPointerEvent>) -> Bool {
         if e.IsAction(n"click") {
             this.Navigate(this.m_url, false);
+        }
+        return false;
+    }
+
+    // Clicking the tab jumps back to the top of the page.
+    protected cb func OnTabClick(e: ref<inkPointerEvent>) -> Bool {
+        if e.IsAction(n"click") {
+            this.ScrollTo(0.0);
         }
         return false;
     }
