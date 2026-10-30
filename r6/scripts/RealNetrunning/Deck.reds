@@ -25,12 +25,14 @@ public class RNFileEntry {
     public let locked: Bool;
 }
 
-// One line of a Browser page. kind: 0 text, 1 title, 2 link, 3 good, 4 bad, 5 note.
-public class RNPageLine {
+// One block of a Browser page (see web.lua and Browser.reds for the kinds).
+public class RNPageBlock {
     public let url: String;
-    public let text: String;
-    public let link: String;
     public let kind: Int32;
+    public let text: String;
+    public let extra: String;
+    public let link: String;
+    public let color: String;
 }
 
 public class DeckService extends ScriptableService {
@@ -63,7 +65,8 @@ public class DeckService extends ScriptableService {
     private let m_pageUrls: array<String>;
     private let m_pageTitles: array<String>;
     private let m_pageCanonical: array<String>;
-    private let m_pageLines: array<ref<RNPageLine>>;
+    private let m_pageThemes: array<String>;
+    private let m_pageBlocks: array<ref<RNPageBlock>>;
 
     // Fixed limits, and defaults that don't rely on a start-up callback.
     private let m_traceSet: Bool;
@@ -305,33 +308,37 @@ public class DeckService extends ScriptableService {
         return -1;
     }
 
-    // Lua: BeginPage, then AddPageLine for each line, then PageReady.
-    public func BeginPage(url: String, title: String, canonical: String) {
+    // Lua: BeginPage, then AddPageBlock for each block, then PageReady.
+    public func BeginPage(url: String, title: String, canonical: String, theme: String) {
         let index = this.PageIndex(url);
         if index < 0 {
             ArrayPush(this.m_pageUrls, url);
             ArrayPush(this.m_pageTitles, title);
             ArrayPush(this.m_pageCanonical, canonical);
+            ArrayPush(this.m_pageThemes, theme);
         } else {
             this.m_pageTitles[index] = title;
             this.m_pageCanonical[index] = canonical;
+            this.m_pageThemes[index] = theme;
         }
-        let kept: array<ref<RNPageLine>>;
-        for line in this.m_pageLines {
-            if NotEquals(line.url, url) {
-                ArrayPush(kept, line);
+        let kept: array<ref<RNPageBlock>>;
+        for block in this.m_pageBlocks {
+            if NotEquals(block.url, url) {
+                ArrayPush(kept, block);
             }
         }
-        this.m_pageLines = kept;
+        this.m_pageBlocks = kept;
     }
 
-    public func AddPageLine(url: String, text: String, link: String, kind: Int32) {
-        let line = new RNPageLine();
-        line.url = url;
-        line.text = text;
-        line.link = link;
-        line.kind = kind;
-        ArrayPush(this.m_pageLines, line);
+    public func AddPageBlock(url: String, kind: Int32, text: String, extra: String, link: String, color: String) {
+        let block = new RNPageBlock();
+        block.url = url;
+        block.kind = kind;
+        block.text = text;
+        block.extra = extra;
+        block.link = link;
+        block.color = color;
+        ArrayPush(this.m_pageBlocks, block);
     }
 
     public func PageReady(url: String) {
@@ -352,11 +359,16 @@ public class DeckService extends ScriptableService {
         return index >= 0 ? this.m_pageCanonical[index] : url;
     }
 
-    public func GetPageLines(url: String) -> array<ref<RNPageLine>> {
-        let result: array<ref<RNPageLine>>;
-        for line in this.m_pageLines {
-            if Equals(line.url, url) {
-                ArrayPush(result, line);
+    public func GetPageTheme(url: String) -> String {
+        let index = this.PageIndex(url);
+        return index >= 0 ? this.m_pageThemes[index] : "MainColors.Red";
+    }
+
+    public func GetPageBlocks(url: String) -> array<ref<RNPageBlock>> {
+        let result: array<ref<RNPageBlock>>;
+        for block in this.m_pageBlocks {
+            if Equals(block.url, url) {
+                ArrayPush(result, block);
             }
         }
         return result;

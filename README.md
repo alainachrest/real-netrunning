@@ -30,7 +30,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - **Windows**: drag them by the title bar, minimise with `[ _ ]`, close with `[ X ]`, click one to bring it to the front, or use its taskbar button. Several can be open at once.
 - **Files**: the computer's own mail and documents in folders, plus a `System` folder of files generated for that machine. Encrypted documents and system files stay locked until you breach the computer. Click a document to open it in its own window.
 - **Save to Home**: documents you open on other computers can be saved to V's own computers, where they appear under `Home/Saved`. They're kept per save.
-- **Browser**: the Night City net. A portal, a directory of every network you know, the newsfeed, corporate sites (with their internal files once breached), CyberScript datapack pages, and the stock exchange. Back, Home and Reload buttons; click any `>` line to follow it.
+- **Browser**: a real browser for the Night City net. Tab, back/forward/reload/home, an address bar you can type an address, ticker or search into, a scrollbar (mouse wheel works over the page) and a status bar that shows where a link goes. Sites have banners in their owner's colours, navigation bars, cards, tables, buttons and live stock charts: the portal, a directory of every network you know, the newsfeed, search, corporate and gang sites (with their internal files once breached), CyberScript datapack pages and the stock exchange.
 - **Exchange**: opens the browser on the Night City Stock Exchange, where you can buy and sell with real eddies.
 - **Terminal**: the cyberdeck shell, already connected to that computer. Type `breach` to unlock its files.
 - **Cyberdeck**: opens the full deck popup connected to that computer.

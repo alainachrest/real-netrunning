@@ -187,13 +187,8 @@ public class RNWindow {
     public let m_docIndex: Int32;
     private let m_docPage: Int32;
 
-    // browser
-    public let m_url: String;
-    private let m_requested: String;
-    private let m_history: array<String>;
-    private let m_page: array<ref<RNPageLine>>;
-    private let m_navBar: wref<inkHorizontalPanel>;
-    private let m_urlText: wref<inkText>;
+    // browser (kind 4) draws through its own view, see Browser.reds
+    private let m_browser: ref<RNBrowserView>;
 
     private func VisibleRows() -> Int32 { return 12; }
     private func PageChars() -> Int32 { return 900; }
@@ -215,7 +210,7 @@ public class RNWindow {
         let root = new inkCanvas();
         root.SetName(StringToName("window" + IntToString(this.m_id)));
         root.SetAnchor(inkEAnchor.TopLeft);
-        root.SetSize(1100.0, 640.0);
+        root.SetSize(this.m_kind == 4 ? Vector2(1320.0, 780.0) : Vector2(1100.0, 640.0));
         root.SetTranslation(x, y);
         root.SetInteractive(true);
         root.Reparent(layer);
@@ -260,34 +255,16 @@ public class RNWindow {
         this.Hover(close);
         close.RegisterToCallback(n"OnRelease", this, n"OnClose");
 
+        if this.m_kind == 4 {
+            this.m_browser = RNBrowserView.Create(this.m_desktop, root, controller);
+            return;
+        }
+
         // body
         let body = new inkVerticalPanel();
         body.SetName(n"body");
         body.SetMargin(inkMargin(22.0, 66.0, 22.0, 16.0));
         body.Reparent(root);
-
-        // browser navigation
-        let navBar = new inkHorizontalPanel();
-        navBar.SetName(n"navBar");
-        navBar.SetMargin(inkMargin(0.0, 0.0, 0.0, 10.0));
-        navBar.SetVisible(this.m_kind == 4);
-        navBar.Reparent(body);
-        this.m_navBar = navBar;
-        let backButton = RNButton(n"back", "[ < ]   ", 26, n"MainColors.Blue");
-        backButton.Reparent(navBar);
-        this.Hover(backButton);
-        backButton.RegisterToCallback(n"OnRelease", this, n"OnBack");
-        let homeButton = RNButton(n"home", "[ HOME ]   ", 26, n"MainColors.Blue");
-        homeButton.Reparent(navBar);
-        this.Hover(homeButton);
-        homeButton.RegisterToCallback(n"OnRelease", this, n"OnHome");
-        let reloadButton = RNButton(n"reload", "[ RELOAD ]   ", 26, n"MainColors.Blue");
-        reloadButton.Reparent(navBar);
-        this.Hover(reloadButton);
-        reloadButton.RegisterToCallback(n"OnRelease", this, n"OnReload");
-        let urlText = RNText(n"url", 26, n"MainColors.Yellow");
-        urlText.Reparent(navBar);
-        this.m_urlText = urlText;
 
         let header = RNButton(n"header", " ", 24, n"MainColors.Yellow");
         header.SetMargin(inkMargin(0.0, 0.0, 0.0, 8.0));
@@ -404,7 +381,7 @@ public class RNWindow {
             case 1: this.DrawFiles(desktop); break;
             case 2: this.DrawDocument(desktop); break;
             case 3: this.DrawTerminal(); break;
-            case 4: this.DrawBrowser(); break;
+            case 4: break;
             default: break;
         }
     }
@@ -519,106 +496,23 @@ public class RNWindow {
     // --- browser --------------------------------------------------------------
 
     public func Navigate(url: String, remember: Bool) {
-        if remember && StrLen(this.m_url) > 0 && NotEquals(this.m_url, url) {
-            ArrayPush(this.m_history, this.m_url);
-            while ArraySize(this.m_history) > 30 {
-                ArrayErase(this.m_history, 0);
-            }
+        if IsDefined(this.m_browser) {
+            this.m_browser.Navigate(url, remember);
         }
-        this.m_requested = url;
-        if !StrBeginsWith(url, "do://") {
-            this.m_url = url;
-        }
-        this.m_offset = 0;
-        let service = DeckService.Get();
-        if IsDefined(service) {
-            service.RequestPage(url);
-        }
-        this.DrawBrowser();
     }
 
     public func OnPageReady(url: String) {
-        if !Equals(url, this.m_requested) {
-            return;
-        }
-        let service = DeckService.Get();
-        if !IsDefined(service) {
-            return;
-        }
-        this.m_page = service.GetPageLines(url);
-        this.m_url = service.GetPageCanonical(url);
-        let title = service.GetPageTitle(url);
-        if StrLen(title) > 0 {
-            this.m_title = title;
-            this.m_titleText.SetText(title);
-        }
-        this.m_requested = "";
-        this.DrawBrowser();
-        if IsDefined(this.m_desktop) {
-            this.m_desktop.RefreshTaskbarTitles();
-        }
-    }
-
-    private func PageColor(kind: Int32) -> CName {
-        switch kind {
-            case 1: return n"MainColors.Red";
-            case 2: return n"MainColors.ActiveBlue";
-            case 3: return n"MainColors.Green";
-            case 4: return n"MainColors.Red";
-            case 5: return n"MainColors.Yellow";
-            default: return n"MainColors.Blue";
-        }
-    }
-
-    private func DrawBrowser() {
-        this.m_urlText.SetText(this.m_url);
-        this.m_save.SetVisible(false);
-        if StrLen(this.m_requested) > 0 && ArraySize(this.m_page) == 0 {
-            this.m_header.SetText("Loading...");
-            this.ClearRowsFrom(0);
-            this.m_pager.SetVisible(false);
-            return;
-        }
-        this.m_header.SetText(StrLen(this.m_requested) > 0 ? "Loading..." : " ");
-        let total = ArraySize(this.m_page);
-        this.m_offset = Clamp(this.m_offset, 0, Max(0, total - this.VisibleRows()));
-        let i = 0;
-        while i < this.VisibleRows() {
-            let index = this.m_offset + i;
-            if index < total {
-                let line = this.m_page[index];
-                this.SetRow(i, line.text, this.PageColor(line.kind));
-            } else {
-                this.SetRow(i, "", n"MainColors.Blue");
+        if IsDefined(this.m_browser) && this.m_browser.OnPageReady(url) {
+            this.m_title = this.m_browser.GetTitle();
+            this.m_titleText.SetText(StrUpper(RNShorten(this.m_title, 40)));
+            if IsDefined(this.m_desktop) {
+                this.m_desktop.RefreshTaskbarTitles();
             }
-            i += 1;
         }
-        this.m_pager.SetVisible(total > this.VisibleRows());
-        this.m_footer.SetText(IntToString(this.m_offset + 1) + "-" + IntToString(Min(total, this.m_offset + this.VisibleRows())) + " of " + IntToString(total));
     }
 
-    protected cb func OnBack(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") && ArraySize(this.m_history) > 0 {
-            let last = ArraySize(this.m_history) - 1;
-            let url = this.m_history[last];
-            ArrayErase(this.m_history, last);
-            this.Navigate(url, false);
-        }
-        return false;
-    }
-
-    protected cb func OnHome(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.Navigate("nc://home", true);
-        }
-        return false;
-    }
-
-    protected cb func OnReload(e: ref<inkPointerEvent>) -> Bool {
-        if e.IsAction(n"click") {
-            this.Navigate(this.m_url, false);
-        }
-        return false;
+    public func GetBrowser() -> ref<RNBrowserView> {
+        return this.m_browser;
     }
 
     // --- input ----------------------------------------------------------------
@@ -666,16 +560,6 @@ public class RNWindow {
             return false;
         }
         let row = RNNameNumber(e.GetCurrentTarget().GetName(), "row");
-        if this.m_kind == 4 {
-            let pageIndex = this.m_offset + row;
-            if row >= 0 && pageIndex < ArraySize(this.m_page) {
-                let link = this.m_page[pageIndex].link;
-                if StrLen(link) > 0 {
-                    this.Navigate(link, !StrBeginsWith(link, "do://"));
-                }
-            }
-            return false;
-        }
         if this.m_kind != 1 {
             return false;
         }
@@ -708,7 +592,7 @@ public class RNWindow {
     }
 
     private func Page(step: Int32) {
-        if this.m_kind == 1 || this.m_kind == 4 {
+        if this.m_kind == 1 {
             this.m_offset += step * this.VisibleRows();
         } else {
             this.m_docPage += step;
@@ -1301,6 +1185,17 @@ public class RNDesktop {
     }
 
     protected cb func OnMouseMove(e: ref<inkPointerEvent>) -> Bool {
+        // mouse wheel scrolls a browser page under the cursor
+        if e.IsAction(n"mouse_wheel") {
+            for candidate in this.m_windows {
+                let browser = candidate.GetBrowser();
+                if candidate.m_kind == 4 && !candidate.m_minimized && IsDefined(browser) && browser.Contains(e.GetScreenSpacePosition()) {
+                    browser.Scroll(e.GetAxisData() > 0.0 ? -2 : 2);
+                    return false;
+                }
+            }
+            return false;
+        }
         let window = this.m_dragging;
         let layer = this.m_windowsLayer;
         if !IsDefined(window) || !IsDefined(layer) || !IsDefined(window.m_root) {

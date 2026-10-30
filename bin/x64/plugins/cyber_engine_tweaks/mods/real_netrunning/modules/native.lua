@@ -212,7 +212,11 @@ local function saveToHome(name, text)
 	World.notify("Saved to your home computer")
 end
 
-local pageKinds = { text = 0, title = 1, link = 2, good = 3, bad = 4, note = 5 }
+-- Block types, numbered the same way in Browser.reds.
+local blockTypes = {
+	banner = 1, nav = 2, heading = 3, text = 4, link = 5, button = 6, card = 7,
+	row = 8, chart = 9, divider = 10, notice = 11, icon = 12, field = 13,
+}
 
 -- A Browser window asked for a page.
 local function servePage(url)
@@ -220,12 +224,13 @@ local function servePage(url)
 	local ok, p = pcall(Web.render, url)
 	if not ok then
 		Native.log("page " .. tostring(url) .. " failed: " .. tostring(p))
-		p = { title = "ERROR", url = url, lines = { { text = "This page failed to load.", link = "", kind = "bad" } } }
+		p = { title = "Error", url = url, theme = "MainColors.Red",
+			blocks = { { type = "notice", text = "This page failed to load.", extra = "", link = "", color = "MainColors.Red" } } }
 	end
 	call(function()
-		svc:BeginPage(url, p.title or "", p.url or url)
-		for _, l in ipairs(p.lines) do
-			svc:AddPageLine(url, l.text or "", l.link or "", pageKinds[l.kind] or 0)
+		svc:BeginPage(url, p.title or "", p.url or url, p.theme or "MainColors.Red")
+		for _, b in ipairs(p.blocks) do
+			svc:AddPageBlock(url, blockTypes[b.type] or 4, b.text or "", b.extra or "", b.link or "", b.color or "")
 		end
 		svc:PageReady(url)
 	end)
