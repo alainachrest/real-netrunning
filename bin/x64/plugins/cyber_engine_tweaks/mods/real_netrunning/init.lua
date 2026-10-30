@@ -22,6 +22,7 @@ local Native = require("modules/native")
 local Market = require("modules/market")
 local Web = require("modules/web")
 local NetWatch = require("modules/netwatch")
+local Cyber = require("modules/cyberspace")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -47,6 +48,14 @@ NetWatch.bus = Bus
 NetWatch.print = Shell.print
 NetWatch.addTrace = function(amount) Shell.addTrace(amount) end
 Bridge.bus = Bus
+Cyber.bus = Bus
+Cyber.print = Shell.print
+Cyber.run = function(command) Shell.run(command) end
+Cyber.addTrace = function(amount) Shell.addTrace(amount) end
+Cyber.connected = function() return Shell.connected end
+Cyber.setCwd = function(path) Shell.setCwd(path) end
+Cyber.openDeck = function() if not Native.isOpen() then Native.open() end end
+Shell.cyber = Cyber
 
 ---------------------------------------------------------------------------
 -- Session handling
@@ -68,6 +77,7 @@ local function startWorld()
 	Network.build()
 	Shell.reset()
 	NetWatch.reset()
+	Cyber.onSessionStart()
 	Bridge.onWorldRebuilt()
 	Native.onWorldRebuilt()
 	RealNetrunning.ready = true
@@ -102,6 +112,7 @@ registerForEvent("onInit", function()
 	GameSession.OnStart(startWorld)
 	GameSession.OnEnd(function()
 		RealNetrunning.ready = false
+		Cyber.active = false
 		Native.close()
 		Shell.reset()
 	end)
@@ -109,6 +120,7 @@ registerForEvent("onInit", function()
 	Bus.on("*", newsFromEvents)
 	Bus.on("network.breached", Native.onBreached)
 	Bus.on("network.floor", Native.onBreached)
+	Bus.on("hack.disconnected", Cyber.onDisconnected)
 	Market.attach(Bus)
 
 	-- Mod reloaded while already in game
@@ -125,6 +137,7 @@ registerForEvent("onUpdate", function(dt)
 		Shell.update(dt)
 		NetWatch.update(dt, Shell.connected)
 		Market.update(dt)
+		Cyber.update(dt)
 	end
 end)
 
@@ -148,6 +161,14 @@ registerHotkey("rn_open_deck", "Open cyberdeck", function()
 	end
 end)
 
+registerHotkey("rn_cyber_use", "Cyberspace: use", function()
+	if RealNetrunning.ready then Cyber.use() end
+end)
+
+registerHotkey("rn_cyber_out", "Cyberspace: jack out", function()
+	if RealNetrunning.ready and Cyber.active then Cyber.jackOut("user") end
+end)
+
 registerHotkey("rn_toggle_overlay_deck", "Show or hide the overlay cyberdeck", function()
 	Terminal.visible = not Terminal.visible
 end)
@@ -160,7 +181,8 @@ RealNetrunning.api = {
 	apiVersion = 1,
 	-- Events: "hack.breach", "hack.download", "hack.connected", "hack.disconnected",
 	-- "netwatch.traced", "netwatch.heat", "network.revealed", "network.breached",
-	-- "device.action", "world.faction_score", "cyberscript.variable", or "*" for all.
+	-- "device.action", "world.faction_score", "cyberscript.variable",
+	-- "cyber.jackin", "cyber.jackout", "cyber.floor", "cyber.ice", "cyber.use", or "*" for all.
 	on = Bus.on,
 	off = Bus.off,
 	emit = Bus.emit,
@@ -174,6 +196,7 @@ RealNetrunning.api = {
 	registerStore = function(def) return require("modules/stores").register(def) end,
 	unregisterStore = function(id) require("modules/stores").unregister(id) end,
 	run = function(command) Shell.run(command) end,
+	isJackedIn = function() return Cyber.active end,
 	openDeck = function() return Native.open() end,
 }
 

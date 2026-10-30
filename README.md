@@ -60,6 +60,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `scrub` | Wipe your traces from a network you have root on, lowering heat (once per network) |
 | `netwatch` | Threat level, heat and agents derezzed. `netwatch world off` stops attacks on V outside the Net |
 | `status` | Deck power, trace, NetWatch heat and threat level |
+| `jackin`, `jackout`, `cyber` | Enter the network you're connected to in cyberspace, leave it, or see where you are |
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
@@ -69,6 +70,22 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.
+
+## Cyberspace
+
+Connect to a network and type `jackin`: V's body stays where it is, and V walks into the network itself, built high above Night City out of the game's own cyberspace (Mikoshi, Alt's cyberspace and the Blackwall).
+
+Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
+
+- Every floor of the network is a platform, stacked downwards. Walk to the way down at the far end of each one to descend; the way back up is behind where you land.
+- **ICE** stands guard at the way down as the owner's own netrunners: gang netrunners on gang nets, corporate security on corp nets, Voodoo Boys-grade elites for Black ICE. Take them down and the next floor opens. Fighting ICE raises your trace. You can still `breach` from the deck instead: use the gate, or type it.
+- **Data objects** on each floor are its files. Use one to download paydata, or to read it in the deck.
+- **Password gates** open your deck to type the code or `crack` it. Control floors have a device console; the core is the bottom floor.
+- **NetWatch** agents who trace into the network show up in person. Kill one for the same bounty as `fight`.
+- No guns in cyberspace: quickhacks only. Fast travel and manual saves are blocked until you jack out.
+- Jack out with the hotkey, `jackout`, or the exit node on the first floor. You're thrown out, with dumpshock, if you're traced, if your health drops too low (not on Black ICE floors: Black ICE kills), or if something finds your body. Jacking in from one of V's own home computers keeps your body safe.
+- Terminal and cyberspace are the same network: anything opened in one is open in the other.
+- If a save ever loads while V was in cyberspace, V wakes up back where they jacked in.
 
 ## Beyond Night City
 
@@ -168,8 +185,11 @@ if rn and rn.api and rn.api.apiVersion >= 1 then
 end
 ```
 
-Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `netwatch.tier`, `netwatch.agent_spawn`, `netwatch.agent_arrived`, `netwatch.agent_defeated`, `netwatch.agent_won`, `netwatch.world_attack`, `network.revealed`, `network.breached`, `network.closed_found`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
+Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `netwatch.tier`, `netwatch.agent_spawn`, `netwatch.agent_arrived`, `netwatch.agent_defeated`, `netwatch.agent_won`, `netwatch.world_attack`, `network.revealed`, `network.breached`, `network.closed_found`, `cyber.jackin`, `cyber.jackout`, `cyber.floor`, `cyber.ice`, `cyber.use`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
 
 ## Credits
+
+Cyberspace asset paths were found with the help of [entSpawner / World Builder](https://www.nexusmods.com/cyberpunk2077/mods/7841) and AppearanceMenuMod's prop lists (no code from either is used).
+
 
 `lib/GameSession.lua` and `lib/GameHUD.lua` are from [psiberx's cp2077-cet-kit](https://github.com/psiberx/cp2077-cet-kit) (MIT licence, included).

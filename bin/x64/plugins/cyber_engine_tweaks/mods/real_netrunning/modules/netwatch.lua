@@ -128,6 +128,21 @@ local function updateAgent(dt, connected)
 	end
 end
 
+-- The agent in the network is beaten (by 'fight', or in person in cyberspace).
+function NetWatch.win()
+	local agent = NetWatch.agent
+	if agent == nil then return false, "There's nobody here to fight." end
+	NetWatch.agent = nil
+	local s = settings()
+	s.agentsDefeated = (s.agentsDefeated or 0) + 1
+	local bounty = 150 * agent.level
+	World.giveMoney(bounty)
+	Network.addHeat(2, "derezzed " .. agent.name)
+	Network.addNews("NetWatch confirms an agent was flatlined in the Net")
+	emit("netwatch.agent_defeated", { addr = agent.addr, name = agent.name, level = agent.level })
+	return true, "You derezzed " .. agent.name .. ". Its deck shards fence for " .. bounty .. " eddies. NetWatch noticed."
+end
+
 -- Returns ok, message.
 function NetWatch.fight()
 	local agent = NetWatch.agent
@@ -136,15 +151,7 @@ function NetWatch.fight()
 	local power = World.deckPower()
 	local chance = math.max(0.1, math.min(0.9, 0.5 + 0.12 * (power - agent.level)))
 	if roll() < chance then
-		NetWatch.agent = nil
-		local s = settings()
-		s.agentsDefeated = (s.agentsDefeated or 0) + 1
-		local bounty = 150 * agent.level
-		World.giveMoney(bounty)
-		Network.addHeat(2, "derezzed " .. agent.name)
-		Network.addNews("NetWatch confirms an agent was flatlined in the Net")
-		emit("netwatch.agent_defeated", { addr = agent.addr, name = agent.name, level = agent.level })
-		return true, "You derezzed " .. agent.name .. ". Its deck shards fence for " .. bounty .. " eddies. NetWatch noticed."
+		return NetWatch.win()
 	end
 	NetWatch.lockout = 20
 	Network.addHeat(5, "lost to " .. agent.name)

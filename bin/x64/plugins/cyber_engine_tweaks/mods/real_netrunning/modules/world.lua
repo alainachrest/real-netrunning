@@ -72,6 +72,129 @@ function World.reportToPolice()
 	end)
 end
 
+function World.removeStatusEffect(effect)
+	return try(function()
+		local player = Game.GetPlayer()
+		Game.GetStatusEffectSystem():RemoveStatusEffect(player:GetEntityID(), TweakDBID.new(effect))
+		return true
+	end)
+end
+
+---------------------------------------------------------------------------
+-- Cyberspace: spawning, moving V, ICE (see modules/cyberspace.lua)
+---------------------------------------------------------------------------
+
+-- V's position and facing: x, y, z, yaw (degrees). nil if unavailable.
+function World.playerTransform()
+	local result = try(function()
+		local player = Game.GetPlayer()
+		local p = player:GetWorldPosition()
+		local yaw = player:GetWorldYaw()
+		return { x = p.x, y = p.y, z = p.z, yaw = yaw }
+	end)
+	return result
+end
+
+function World.teleport(x, y, z, yaw)
+	return try(function()
+		local player = Game.GetPlayer()
+		Game.GetTeleportationFacility():Teleport(player, Vector4.new(x, y, z, 1.0), EulerAngles.new(0, 0, yaw or 0))
+		return true
+	end)
+end
+
+-- Spawns a static entity from a template path. Returns its EntityID.
+function World.spawnProp(path, x, y, z, yaw, appearance)
+	return try(function()
+		local spec = StaticEntitySpec.new()
+		spec.templatePath = path
+		spec.position = Vector4.new(x, y, z, 1.0)
+		spec.orientation = EulerAngles.new(0, 0, yaw or 0):ToQuat()
+		if appearance then spec.appearanceName = appearance end
+		spec.attached = true
+		return Game.GetStaticEntitySystem():SpawnEntity(spec)
+	end)
+end
+
+-- An invisible 8 x 8 m floor tile (the collider is added in Cyberspace.reds), centred on x, y, z.
+World.tileTemplate = "base\\quest\\main_quests\\part1\\q115\\test\\empty_entity.ent"
+function World.spawnTile(x, y, z)
+	return World.spawnProp(World.tileTemplate, x, y, z, 0)
+end
+
+function World.despawnProp(id)
+	if id == nil then return end
+	try(function() Game.GetStaticEntitySystem():DespawnEntity(id) end)
+end
+
+-- Spawns an NPC from a character record, e.g. "Character.netwatch_base_ma". Returns its EntityID.
+function World.spawnNPC(record, x, y, z, yaw)
+	return try(function()
+		local spec = DynamicEntitySpec.new()
+		spec.recordID = record
+		spec.position = Vector4.new(x, y, z, 1.0)
+		spec.orientation = EulerAngles.new(0, 0, yaw or 0):ToQuat()
+		spec.alwaysSpawned = true
+		spec.persistState = false
+		spec.persistSpawn = false
+		return Game.GetDynamicEntitySystem():CreateEntity(spec)
+	end)
+end
+
+function World.deleteNPC(id)
+	if id == nil then return end
+	try(function() Game.GetDynamicEntitySystem():DeleteEntity(id) end)
+end
+
+-- true dead, false alive, nil not spawned (yet).
+function World.npcDead(id)
+	local result = try(function()
+		local npc = Game.FindEntityByID(id)
+		if npc == nil then return "none" end
+		return npc:IsDead() and "dead" or "alive"
+	end)
+	if result == "dead" then return true elseif result == "alive" then return false end
+	return nil
+end
+
+-- Turns a spawned NPC against V. Returns true once it worked.
+function World.makeHostile(id)
+	return try(function()
+		local npc = Game.FindEntityByID(id)
+		local player = Game.GetPlayer()
+		if npc == nil or player == nil then return false end
+		npc:GetAttitudeAgent():SetAttitudeGroup(CName.new("hostile"))
+		AIActionHelper.TryChangingAttitudeToHostile(npc, player)
+		return true
+	end) == true
+end
+
+-- V's health in percent (0-100).
+function World.healthPercent()
+	local value = try(function()
+		local player = Game.GetPlayer()
+		return Game.GetStatPoolsSystem():GetStatPoolValue(player:GetEntityID(), gamedataStatPoolType.Health, true)
+	end)
+	return type(value) == "number" and value or 100
+end
+
+function World.inCombat()
+	return try(function() return Game.GetPlayer():IsInCombat() end) == true
+end
+
+function World.inVehicle()
+	return try(function() return Game.GetMountedVehicle(Game.GetPlayer()) ~= nil end) == true
+end
+
+-- Tells redscript V is in cyberspace (blocks manual saves).
+function World.setJackedIn(on)
+	return try(function()
+		local system = Game.GetScriptableSystemsContainer():Get("RealNetrunning.RNCyberspaceSystem")
+		if system then system:SetJackedIn(on == true) end
+		return true
+	end)
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

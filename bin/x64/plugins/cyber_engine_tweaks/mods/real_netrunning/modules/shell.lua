@@ -156,6 +156,27 @@ def("scan", "scan [region or word]", "List networks you know. Filter by region (
 	if shown == 0 then out(filter and "Nothing matches." or "No networks in range.") end
 end)
 
+-- Cyberspace (modules/cyberspace.lua). Set by init, so the shell doesn't need to load it.
+Shell.cyber = nil
+
+def("jackin", "jackin", "Jack in to the network you're connected to and walk through it in cyberspace.", function()
+	if Shell.cyber == nil then out("Cyberspace isn't available.", "err") return end
+	local ok, msg = Shell.cyber.jackIn()
+	out(msg, ok and "ok" or "err")
+	if ok then out("Walk up to things and press your 'Cyberspace: use' key. 'jackout' or the exit node to leave.") end
+end)
+
+def("jackout", "jackout", "Leave cyberspace.", function()
+	if Shell.cyber == nil then out("Cyberspace isn't available.", "err") return end
+	local ok, msg = Shell.cyber.jackOut("user")
+	if not ok then out(msg, "err") end
+end)
+
+def("cyber", "cyber", "Where you are in cyberspace.", function()
+	if Shell.cyber == nil then out("Cyberspace isn't available.", "err") return end
+	out(Shell.cyber.status())
+end)
+
 def("uplinks", "uplinks", "Which regions beyond Night City your deck can reach.", function()
 	for _, region in ipairs(Lore.regionOrder) do
 		if region ~= "nc" and region ~= "closed" then
@@ -656,6 +677,10 @@ function Shell.update(dt)
 		Shell.heatDecayTimer = 0
 		if Network.state and Network.state.heat > 0 then Network.addHeat(-1, "cooling") end
 	end
+end
+
+function Shell.setCwd(path)
+	Shell.cwd = path
 end
 
 function Shell.reset()
