@@ -24,6 +24,7 @@ public class RNBrowserView {
     private let m_tabAccent: wref<inkImage>;
     private let m_lock: wref<inkText>;
     private let m_address: ref<TextInput>;
+    private let m_viewport: wref<inkScrollArea>;
     private let m_content: wref<inkVerticalPanel>;
     private let m_status: wref<inkText>;
     private let m_thumb: wref<inkRectangle>;
@@ -37,7 +38,8 @@ public class RNBrowserView {
     private let m_blocks: array<ref<RNPageBlock>>;
     private let m_unitStart: array<Int32>;
     private let m_unitEnd: array<Int32>;
-    private let m_scroll: Int32;
+    private let m_offset: Float;       // how far the page is scrolled, in pixels
+    private let m_estimate: Float;     // estimated page height, used until layout is known
 
     // layout, in window coordinates (the window is 1320 x 780)
     private func ContentTop() -> Float { return 176.0; }
@@ -126,10 +128,23 @@ public class RNBrowserView {
         page.SetTranslation(16.0, this.ContentTop());
         page.Reparent(root);
         RNRect(n"bg", RNColor(0.02, 0.025, 0.04, 1.0)).Reparent(page);
+        // The page is built once and slid up and down inside a clipped scroll area,
+        // so scrolling never creates or destroys widgets.
+        let viewport = new inkScrollArea();
+        viewport.SetName(n"viewport");
+        viewport.SetAnchor(inkEAnchor.Fill);
+        viewport.SetMargin(inkMargin(24.0, 16.0, 40.0, 12.0));
+        viewport.SetRenderTransformPivot(Vector2(0.0, 0.0));
+        viewport.SetFitToContentDirection(inkFitToContentDirection.Horizontal);
+        viewport.SetConstrainContentPosition(false);
+        viewport.SetUseInternalMask(true);
+        viewport.Reparent(page);
+        this.m_viewport = viewport;
         let content = new inkVerticalPanel();
         content.SetName(n"content");
-        content.SetMargin(inkMargin(24.0, 20.0, 40.0, 0.0));
-        content.Reparent(page);
+        content.SetFitToContent(true);
+        content.SetRenderTransformPivot(Vector2(0.0, 0.0));
+        content.Reparent(viewport);
         this.m_content = content;
 
         // scrollbar
@@ -218,7 +233,6 @@ public class RNBrowserView {
         this.m_title = service.GetPageTitle(url);
         this.m_theme = StringToName(service.GetPageTheme(url));
         this.m_requested = "";
-        this.m_scroll = 0;
         this.m_address.SetText(this.m_url);
         this.m_tabText.SetText(RNShorten(this.m_title, 30));
         this.m_tabAccent.BindProperty(n"tintColor", this.m_theme);
@@ -288,13 +302,34 @@ public class RNBrowserView {
         }
     }
 
-    public func Scroll(step: Int32) {
-        let units = ArraySize(this.m_unitStart);
-        let target = Clamp(this.m_scroll + step, 0, Max(0, units - 1));
-        if target != this.m_scroll {
-            this.m_scroll = target;
-            this.Render();
+    private func PageHeight() -> Float {
+        let content = this.m_content;
+        if IsDefined(content) {
+            let measured = content.GetDesiredSize().Y;
+            if measured > 1.0 {
+                return measured;
+            }
         }
+        return this.m_estimate;
+    }
+
+    private func MaxOffset() -> Float {
+        return MaxF(0.0, this.PageHeight() - this.ViewportHeight() + 40.0);
+    }
+
+    // One wheel notch moves the page by step * 45 pixels.
+    public func Scroll(step: Int32) {
+        this.ScrollTo(this.m_offset + 45.0 * Cast<Float>(step));
+    }
+
+    private func ScrollTo(offset: Float) {
+        let content = this.m_content;
+        if !IsDefined(content) {
+            return;
+        }
+        this.m_offset = MinF(MaxF(0.0, offset), this.MaxOffset());
+        content.SetTranslation(Vector2(0.0, -this.m_offset));
+        this.UpdateScrollbar();
     }
 
     // Is a screen position over the page area? Used for mouse wheel scrolling.
@@ -315,42 +350,40 @@ public class RNBrowserView {
             return;
         }
         content.RemoveAllChildren();
+        this.m_estimate = 0.0;
         let units = ArraySize(this.m_unitStart);
         if units == 0 {
             this.ShowMessage("This page is empty.");
-            return;
         }
-        let used = 0.0;
-        let unit = this.m_scroll;
-        let shown = 0;
-        while unit < units {
-            let height = this.EstimateHeight(unit);
-            if shown > 0 && used + height > this.ViewportHeight() {
-                break;
-            }
+        let unit = 0;
+        while unit < units && unit < 250 {
             this.DrawUnit(content, unit);
-            used += height;
-            shown += 1;
+            this.m_estimate += this.EstimateHeight(unit);
             unit += 1;
         }
-        this.UpdateScrollbar(shown, units);
+        this.m_offset = 0.0;
+        content.SetTranslation(Vector2(0.0, 0.0));
+        this.UpdateScrollbar();
     }
 
-    private func UpdateScrollbar(shown: Int32, units: Int32) {
+    private func UpdateScrollbar() {
         let thumb = this.m_thumb;
         if !IsDefined(thumb) {
             return;
         }
         let track = this.ContentBottom() - this.ContentTop() - 16.0;
-        if shown >= units {
+        let page = this.PageHeight();
+        let view = this.ViewportHeight();
+        if page <= view {
             thumb.SetVisible(false);
             return;
         }
         thumb.SetVisible(true);
-        let size = MaxF(40.0, track * Cast<Float>(shown) / Cast<Float>(units));
-        let top = (track - size) * Cast<Float>(this.m_scroll) / Cast<Float>(Max(1, units - shown));
+        let size = MaxF(40.0, track * view / page);
+        let maxOffset = MaxF(1.0, this.MaxOffset());
+        let top = (track - size) * MinF(1.0, this.m_offset / maxOffset);
         thumb.SetSize(8.0, size);
-        thumb.SetMargin(inkMargin(0.0, 8.0 + MinF(top, track - size), 10.0, 0.0));
+        thumb.SetMargin(inkMargin(0.0, 8.0 + top, 10.0, 0.0));
         thumb.BindProperty(n"tintColor", this.m_theme);
     }
 
