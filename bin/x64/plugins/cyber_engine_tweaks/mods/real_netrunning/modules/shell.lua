@@ -172,8 +172,12 @@ def("jackout", "jackout", "Leave cyberspace.", function()
 	if not ok then out(msg, "err") end
 end)
 
-def("cyber", "cyber", "Where you are in cyberspace.", function()
+def("cyber", "cyber [debug]", "Where you are in cyberspace. 'cyber debug' shows the details (also after a failed jack-in).", function(args)
 	if Shell.cyber == nil then out("Cyberspace isn't available.", "err") return end
+	if args[1] == "debug" then
+		out(Shell.cyber.active and Shell.cyber.debug() or ("Last jack-in:\n" .. tostring(Shell.cyber.lastDebug or "none yet")))
+		return
+	end
 	out(Shell.cyber.status())
 end)
 

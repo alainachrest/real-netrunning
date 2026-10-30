@@ -122,6 +122,12 @@ function World.spawnTile(x, y, z)
 	return World.spawnProp(World.tileTemplate, x, y, z, 0)
 end
 
+-- true once a static entity is in the world.
+function World.propSpawned(id)
+	if id == nil then return false end
+	return try(function() return Game.GetStaticEntitySystem():IsSpawned(id) end) == true
+end
+
 function World.despawnProp(id)
 	if id == nil then return end
 	try(function() Game.GetStaticEntitySystem():DespawnEntity(id) end)

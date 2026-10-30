@@ -293,6 +293,7 @@ function Cyber.jackIn()
 
 	for _, effect in ipairs(Kit.restrictions) do World.applyStatusEffect(effect) end
 	World.setJackedIn(true)
+	Cyber.closeDeck()
 	build()
 	emit("cyber.jackin", { addr = addr })
 	return true, "Jacking in to " .. net.name .. "..."
@@ -311,6 +312,8 @@ function Cyber.jackOut(reason, quiet)
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
 	end
 	local addr = Cyber.addr
+	Cyber.lastReason = reason or "user"
+	Cyber.lastDebug = Cyber.debug()
 	Cyber.active, Cyber.phase, Cyber.addr, Cyber.body, Cyber.danger = false, nil, nil, nil, nil
 	local s = state()
 	s.active, s.body, s.addr = false, nil, nil
@@ -637,6 +640,27 @@ function Cyber.update(dt)
 		updateAgent()
 		updateBody(step)
 	end
+end
+
+-- What's going on, for working out problems in game ('cyber debug').
+function Cyber.debug()
+	local lines = {}
+	local pos = World.playerTransform()
+	table.insert(lines, "active=" .. tostring(Cyber.active) .. " phase=" .. tostring(Cyber.phase) .. " floor=" .. tostring(Cyber.floor) ..
+		" arrived=" .. tostring(Cyber.arrived))
+	if pos then table.insert(lines, string.format("V at %.1f, %.1f, %.1f", pos.x, pos.y, pos.z)) end
+	local t = Cyber.target
+	if t then table.insert(lines, string.format("sent to %.1f, %.1f, %.1f", t.x, t.y, t.z)) end
+	local tiles, spawned, props, propsSpawned = 0, 0, 0, 0
+	for _, floor in pairs(Cyber.floors) do
+		for _, id in ipairs(floor.tiles) do tiles = tiles + 1 if World.propSpawned(id) then spawned = spawned + 1 end end
+		for _, id in ipairs(floor.props) do props = props + 1 if World.propSpawned(id) then propsSpawned = propsSpawned + 1 end end
+	end
+	table.insert(lines, "floor tiles spawned " .. spawned .. "/" .. tiles .. ", props spawned " .. propsSpawned .. "/" .. props)
+	local falls = 0
+	for _ in ipairs(Cyber.falls or {}) do falls = falls + 1 end
+	table.insert(lines, "falls " .. falls .. "   last jack-out: " .. tostring(Cyber.lastReason))
+	return table.concat(lines, "\n")
 end
 
 function Cyber.status()
