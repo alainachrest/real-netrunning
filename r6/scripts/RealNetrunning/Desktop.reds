@@ -60,6 +60,80 @@ func RNButton(name: CName, label: String, size: Int32, color: CName) -> ref<inkT
     return button;
 }
 
+func RNShapes() -> ResRef {
+    return r"base\\gameplay\\gui\\common\\shapes\\atlas_shapes_sync.inkatlas";
+}
+
+func RNHubIcons() -> ResRef {
+    return r"base\\gameplay\\gui\\fullscreen\\hub_menu\\hub_atlas.inkatlas";
+}
+
+// A themed image from one of the game's atlases, stretched to fill its parent.
+func RNImage(name: CName, atlas: ResRef, part: CName, color: CName, opacity: Float) -> ref<inkImage> {
+    let image = new inkImage();
+    image.SetName(name);
+    image.SetAtlasResource(atlas);
+    image.SetTexturePart(part);
+    image.SetNineSliceScale(true);
+    image.SetAnchor(inkEAnchor.Fill);
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+    image.BindProperty(n"tintColor", color);
+    image.SetOpacity(opacity);
+    return image;
+}
+
+// A hub-menu icon of a fixed size.
+func RNIcon(name: CName, part: CName, size: Float, color: CName) -> ref<inkImage> {
+    let icon = new inkImage();
+    icon.SetName(name);
+    icon.SetAtlasResource(RNHubIcons());
+    icon.SetTexturePart(part);
+    icon.SetSize(size, size);
+    icon.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+    icon.BindProperty(n"tintColor", color);
+    return icon;
+}
+
+// Which icon each app uses.
+func RNAppIcon(app: CName) -> CName {
+    if Equals(app, n"app_files") { return n"ico_data"; }
+    if Equals(app, n"app_mail") { return n"ico_phone"; }
+    if Equals(app, n"app_documents") { return n"ico_shards_hub"; }
+    if Equals(app, n"app_system") { return n"ico_stats_hub"; }
+    if Equals(app, n"app_browser") { return n"ico_map"; }
+    if Equals(app, n"app_market") { return n"ico_inventory"; }
+    if Equals(app, n"app_terminal") { return n"ico_deck_hub"; }
+    if Equals(app, n"app_deck") { return n"ico_cyberware"; }
+    if Equals(app, n"app_exit") { return n"ico_save"; }
+    return n"ico_journal";
+}
+
+func RNShorten(text: String, length: Int32) -> String {
+    if StrLen(text) <= length {
+        return text;
+    }
+    return StrLeft(text, length - 2) + "..";
+}
+
+// Brightens widgets under the mouse.
+public class RNHover {
+    public func Attach(widget: ref<inkWidget>) {
+        widget.SetOpacity(0.8);
+        widget.RegisterToCallback(n"OnHoverOver", this, n"OnHoverIn");
+        widget.RegisterToCallback(n"OnHoverOut", this, n"OnHoverOff");
+    }
+
+    protected cb func OnHoverIn(e: ref<inkPointerEvent>) -> Bool {
+        e.GetCurrentTarget().SetOpacity(1.0);
+        return false;
+    }
+
+    protected cb func OnHoverOff(e: ref<inkPointerEvent>) -> Bool {
+        e.GetCurrentTarget().SetOpacity(0.8);
+        return false;
+    }
+}
+
 // Journal titles and contents can be localisation keys.
 func RNLocalize(text: String) -> String {
     if StrBeginsWith(text, "LocKey#") {
@@ -91,6 +165,7 @@ public class RNWindow {
     public let m_root: wref<inkCanvas>;
 
     private let m_desktop: wref<RNDesktop>;
+    private let m_frame: wref<inkImage>;
     private let m_titleText: wref<inkText>;
     private let m_header: wref<inkText>;
     private let m_rows: array<wref<inkText>>;
@@ -147,10 +222,10 @@ public class RNWindow {
         root.RegisterToCallback(n"OnPress", this, n"OnWindowPress");
         this.m_root = root;
 
-        RNRect(n"frame", RNColor(0.55, 0.12, 0.12, 0.9)).Reparent(root);
-        let inner = RNRect(n"bg", RNColor(0.03, 0.05, 0.08, 0.98));
-        inner.SetMargin(inkMargin(2.0, 2.0, 2.0, 2.0));
-        inner.Reparent(root);
+        RNImage(n"bg", RNShapes(), n"cell_bg", n"MainColors.Fullscreen_PrimaryBackgroundDarkest", 0.97).Reparent(root);
+        let frame = RNImage(n"frame", RNShapes(), n"cell_fg", n"MainColors.Red", 1.0);
+        frame.Reparent(root);
+        this.m_frame = frame;
 
         // title bar: drag handle, title, minimise and close
         let bar = new inkCanvas();
@@ -160,8 +235,8 @@ public class RNWindow {
         bar.SetInteractive(true);
         bar.Reparent(root);
         bar.RegisterToCallback(n"OnPress", this, n"OnTitlePress");
-        let barBg = RNRect(n"bg", RNColor(0.14, 0.04, 0.05, 1.0));
-        barBg.SetMargin(inkMargin(2.0, 2.0, 2.0, 0.0));
+        let barBg = RNImage(n"bg", RNShapes(), n"button_big2_bg", n"MainColors.PanelDarkRed", 0.85);
+        barBg.SetMargin(inkMargin(4.0, 4.0, 4.0, 0.0));
         barBg.Reparent(bar);
 
         let titleText = RNText(n"title", 28, n"MainColors.Red");
@@ -178,9 +253,11 @@ public class RNWindow {
         buttons.Reparent(bar);
         let minimize = RNButton(n"minimize", "[ _ ]   ", 28, n"MainColors.Blue");
         minimize.Reparent(buttons);
+        this.Hover(minimize);
         minimize.RegisterToCallback(n"OnRelease", this, n"OnMinimize");
         let close = RNButton(n"close", "[ X ]", 28, n"MainColors.Red");
         close.Reparent(buttons);
+        this.Hover(close);
         close.RegisterToCallback(n"OnRelease", this, n"OnClose");
 
         // body
@@ -198,12 +275,15 @@ public class RNWindow {
         this.m_navBar = navBar;
         let backButton = RNButton(n"back", "[ < ]   ", 26, n"MainColors.Blue");
         backButton.Reparent(navBar);
+        this.Hover(backButton);
         backButton.RegisterToCallback(n"OnRelease", this, n"OnBack");
         let homeButton = RNButton(n"home", "[ HOME ]   ", 26, n"MainColors.Blue");
         homeButton.Reparent(navBar);
+        this.Hover(homeButton);
         homeButton.RegisterToCallback(n"OnRelease", this, n"OnHome");
         let reloadButton = RNButton(n"reload", "[ RELOAD ]   ", 26, n"MainColors.Blue");
         reloadButton.Reparent(navBar);
+        this.Hover(reloadButton);
         reloadButton.RegisterToCallback(n"OnRelease", this, n"OnReload");
         let urlText = RNText(n"url", 26, n"MainColors.Yellow");
         urlText.Reparent(navBar);
@@ -232,9 +312,11 @@ public class RNWindow {
         this.m_pager = pager;
         let prevButton = RNButton(n"prev", "[ PREV ]   ", 24, n"MainColors.Yellow");
         prevButton.Reparent(pager);
+        this.Hover(prevButton);
         prevButton.RegisterToCallback(n"OnRelease", this, n"OnPrev");
         let nextButton = RNButton(n"next", "[ NEXT ]   ", 24, n"MainColors.Yellow");
         nextButton.Reparent(pager);
+        this.Hover(nextButton);
         nextButton.RegisterToCallback(n"OnRelease", this, n"OnNext");
         let footer = RNText(n"footer", 24, n"MainColors.Yellow");
         footer.Reparent(pager);
@@ -242,6 +324,7 @@ public class RNWindow {
         let save = RNButton(n"save", "      [ SAVE TO HOME ]", 24, n"MainColors.Green");
         save.SetVisible(false);
         save.Reparent(pager);
+        this.Hover(save);
         save.RegisterToCallback(n"OnRelease", this, n"OnSave");
         this.m_save = save;
 
@@ -263,6 +346,18 @@ public class RNWindow {
             this.m_input.SetWidth(820.0);
             this.m_input.Reparent(inputRow, controller);
             this.m_input.RegisterToCallback(n"OnInputKey", this, n"OnTerminalKey");
+        }
+    }
+
+    private func Hover(widget: ref<inkWidget>) {
+        if IsDefined(this.m_desktop) {
+            this.m_desktop.Hover(widget);
+        }
+    }
+
+    public func SetFocused(focused: Bool) {
+        if IsDefined(this.m_frame) {
+            this.m_frame.SetOpacity(focused ? 1.0 : 0.35);
         }
     }
 
@@ -665,6 +760,7 @@ public class RNDesktop {
     private let m_clock: wref<inkText>;
 
     // windows
+    private let m_hover: ref<RNHover>;
     private let m_windows: array<ref<RNWindow>>;
     private let m_nextId: Int32;
     private let m_focusedId: Int32;
@@ -678,6 +774,7 @@ public class RNDesktop {
         self.m_controller = controller;
         self.m_key = key;
         self.m_name = RNLocalize(name);
+        self.m_hover = new RNHover();
         self.LoadVanillaDocuments(ps);
         self.Build(root);
 
@@ -690,6 +787,10 @@ public class RNDesktop {
             service.RequestMachine(key, self.m_name);
         }
         return self;
+    }
+
+    public func Hover(widget: ref<inkWidget>) {
+        this.m_hover.Attach(widget);
     }
 
     public static func ColorFor(kind: Int32) -> CName {
@@ -796,27 +897,54 @@ public class RNDesktop {
         desktop.SetVisible(false);
         desktop.Reparent(root);
         this.m_desktop = desktop;
-        RNRect(n"wallpaper", RNColor(0.02, 0.03, 0.05, 0.97)).Reparent(desktop);
+        RNRect(n"wallpaper", RNColor(0.015, 0.02, 0.035, 0.98)).Reparent(desktop);
+        let vignette = new inkImage();
+        vignette.SetName(n"vignette");
+        vignette.SetAtlasResource(r"base\\gameplay\\gui\\widgets\\notifications\\vignette.inkatlas");
+        vignette.SetTexturePart(n"vignette_1");
+        vignette.SetNineSliceScale(true);
+        vignette.SetAnchor(inkEAnchor.Fill);
+        vignette.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+        vignette.BindProperty(n"tintColor", n"MainColors.Red");
+        vignette.SetOpacity(0.35);
+        vignette.Reparent(desktop);
+
+        let brand = RNText(n"brand", 120, n"MainColors.Red");
+        brand.SetAnchor(inkEAnchor.BottomRight);
+        brand.SetAnchorPoint(Vector2(1.0, 1.0));
+        brand.SetHAlign(inkEHorizontalAlign.Right);
+        brand.SetMargin(inkMargin(0.0, 0.0, 60.0, 110.0));
+        brand.SetOpacity(0.12);
+        brand.SetText("NC//OS");
+        brand.Reparent(desktop);
         let watermark = RNText(n"watermark", 30, n"MainColors.Red");
-        watermark.SetAnchor(inkEAnchor.TopRight);
-        watermark.SetAnchorPoint(Vector2(1.0, 0.0));
+        watermark.SetAnchor(inkEAnchor.BottomRight);
+        watermark.SetAnchorPoint(Vector2(1.0, 1.0));
         watermark.SetHAlign(inkEHorizontalAlign.Right);
-        watermark.SetMargin(inkMargin(0.0, 30.0, 40.0, 0.0));
-        watermark.SetOpacity(0.5);
+        watermark.SetMargin(inkMargin(0.0, 0.0, 66.0, 90.0));
+        watermark.SetOpacity(0.4);
         watermark.SetText(StrUpper(this.m_name));
         watermark.Reparent(desktop);
 
-        // icon tiles
-        let icons = new inkVerticalPanel();
+        // icon tiles, two columns
+        let icons = new inkHorizontalPanel();
         icons.SetName(n"icons");
         icons.SetMargin(inkMargin(40.0, 40.0, 0.0, 0.0));
         icons.Reparent(desktop);
-        this.AddIcon(icons, n"app_files", "[ ]", "Files");
-        this.AddIcon(icons, n"app_mail", "@", "Mail");
-        this.AddIcon(icons, n"app_browser", "www", "Browser");
-        this.AddIcon(icons, n"app_market", "$", "Exchange");
-        this.AddIcon(icons, n"app_terminal", ">_", "Terminal");
-        this.AddIcon(icons, n"app_deck", "#", "Cyberdeck");
+        let colA = new inkVerticalPanel();
+        colA.SetName(n"colA");
+        colA.Reparent(icons);
+        let colB = new inkVerticalPanel();
+        colB.SetName(n"colB");
+        colB.SetMargin(inkMargin(20.0, 0.0, 0.0, 0.0));
+        colB.Reparent(icons);
+        this.AddIcon(colA, n"app_files", "Files");
+        this.AddIcon(colA, n"app_mail", "Mail");
+        this.AddIcon(colA, n"app_browser", "Browser");
+        this.AddIcon(colA, n"app_market", "Exchange");
+        this.AddIcon(colB, n"app_terminal", "Terminal");
+        this.AddIcon(colB, n"app_deck", "Cyberdeck");
+        this.AddIcon(colB, n"app_system", "System");
 
         // windows sit above the icons and below the taskbar and start menu
         let windows = new inkCanvas();
@@ -829,26 +957,29 @@ public class RNDesktop {
         this.BuildStartMenu(desktop);
     }
 
-    private func AddIcon(parent: ref<inkCompoundWidget>, name: CName, glyph: String, label: String) {
+    private func AddIcon(parent: ref<inkCompoundWidget>, name: CName, label: String) {
         let tile = new inkCanvas();
         tile.SetName(name);
-        tile.SetSize(150.0, 130.0);
-        tile.SetMargin(inkMargin(0.0, 0.0, 0.0, 22.0));
+        tile.SetSize(150.0, 150.0);
+        tile.SetMargin(inkMargin(0.0, 0.0, 0.0, 16.0));
         tile.SetInteractive(true);
         tile.Reparent(parent);
         tile.RegisterToCallback(n"OnRelease", this, n"OnApp");
-        let box = RNRect(n"box", RNColor(0.10, 0.12, 0.18, 0.9));
+        this.Hover(tile);
+
+        let box = new inkCanvas();
+        box.SetName(n"box");
         box.SetAnchor(inkEAnchor.TopCenter);
         box.SetAnchorPoint(Vector2(0.5, 0.0));
-        box.SetSize(84.0, 76.0);
+        box.SetSize(104.0, 104.0);
         box.Reparent(tile);
-        let glyphText = RNText(n"glyph", 40, n"MainColors.Blue");
-        glyphText.SetAnchor(inkEAnchor.TopCenter);
-        glyphText.SetAnchorPoint(Vector2(0.5, 0.0));
-        glyphText.SetHAlign(inkEHorizontalAlign.Center);
-        glyphText.SetMargin(inkMargin(0.0, 12.0, 0.0, 0.0));
-        glyphText.SetText(glyph);
-        glyphText.Reparent(tile);
+        RNImage(n"bg", RNShapes(), n"cell_bg", n"MainColors.Fullscreen_PrimaryBackgroundDarkest", 0.85).Reparent(box);
+        RNImage(n"frame", RNShapes(), n"cell_fg", n"MainColors.Red", 0.6).Reparent(box);
+        let icon = RNIcon(n"icon", RNAppIcon(name), 72.0, n"MainColors.Blue");
+        icon.SetAnchor(inkEAnchor.Centered);
+        icon.SetAnchorPoint(Vector2(0.5, 0.5));
+        icon.Reparent(box);
+
         let labelText = RNText(n"label", 24, n"MainColors.Blue");
         labelText.SetAnchor(inkEAnchor.BottomCenter);
         labelText.SetAnchorPoint(Vector2(0.5, 1.0));
@@ -862,17 +993,36 @@ public class RNDesktop {
         taskbar.SetName(n"taskbar");
         taskbar.SetAnchor(inkEAnchor.BottomFillHorizontaly);
         taskbar.SetAnchorPoint(Vector2(0.5, 1.0));
-        taskbar.SetSize(100.0, 60.0);
+        taskbar.SetSize(100.0, 66.0);
         taskbar.Reparent(desktop);
-        RNRect(n"bg", RNColor(0.08, 0.02, 0.03, 0.97)).Reparent(taskbar);
+        RNRect(n"bg", RNColor(0.05, 0.015, 0.025, 0.97)).Reparent(taskbar);
+        let edge = RNRect(n"edge", RNColor(0.8, 0.15, 0.15, 0.9));
+        edge.SetAnchor(inkEAnchor.TopFillHorizontaly);
+        edge.SetSize(100.0, 2.0);
+        edge.Reparent(taskbar);
 
         let left = new inkHorizontalPanel();
         left.SetName(n"left");
-        left.SetMargin(inkMargin(20.0, 14.0, 0.0, 0.0));
+        left.SetMargin(inkMargin(14.0, 9.0, 0.0, 0.0));
         left.Reparent(taskbar);
-        let start = RNButton(n"start", "[ START ]      ", 28, n"MainColors.Red");
+
+        let start = new inkCanvas();
+        start.SetName(n"start");
+        start.SetSize(190.0, 48.0);
+        start.SetMargin(inkMargin(0.0, 0.0, 16.0, 0.0));
+        start.SetInteractive(true);
         start.Reparent(left);
         start.RegisterToCallback(n"OnRelease", this, n"OnStart");
+        this.Hover(start);
+        RNImage(n"bg", RNShapes(), n"button_big2_bg", n"MainColors.PanelDarkRed", 0.95).Reparent(start);
+        RNImage(n"frame", RNShapes(), n"button_big2_fg", n"MainColors.Red", 1.0).Reparent(start);
+        let startText = RNText(n"label", 28, n"MainColors.Red");
+        startText.SetAnchor(inkEAnchor.Centered);
+        startText.SetAnchorPoint(Vector2(0.5, 0.5));
+        startText.SetHAlign(inkEHorizontalAlign.Center);
+        startText.SetText("NC//OS");
+        startText.Reparent(start);
+
         let tasks = new inkHorizontalPanel();
         tasks.SetName(n"tasks");
         tasks.Reparent(left);
@@ -882,7 +1032,7 @@ public class RNDesktop {
         tray.SetName(n"tray");
         tray.SetAnchor(inkEAnchor.TopRight);
         tray.SetAnchorPoint(Vector2(1.0, 0.0));
-        tray.SetMargin(inkMargin(0.0, 14.0, 24.0, 0.0));
+        tray.SetMargin(inkMargin(0.0, 18.0, 28.0, 0.0));
         tray.Reparent(taskbar);
         let heat = RNText(n"heat", 26, n"MainColors.Yellow");
         heat.Reparent(tray);
@@ -897,25 +1047,27 @@ public class RNDesktop {
         menu.SetName(n"startMenu");
         menu.SetAnchor(inkEAnchor.BottomLeft);
         menu.SetAnchorPoint(Vector2(0.0, 1.0));
-        menu.SetMargin(inkMargin(20.0, 0.0, 0.0, 66.0));
-        menu.SetSize(380.0, 520.0);
+        menu.SetMargin(inkMargin(14.0, 0.0, 0.0, 72.0));
+        menu.SetSize(420.0, 640.0);
         menu.SetVisible(false);
         menu.SetInteractive(true);
         menu.Reparent(desktop);
         this.m_startMenu = menu;
-        RNRect(n"frame", RNColor(0.55, 0.12, 0.12, 0.9)).Reparent(menu);
-        let bg = RNRect(n"bg", RNColor(0.05, 0.03, 0.05, 0.99));
-        bg.SetMargin(inkMargin(2.0, 2.0, 2.0, 2.0));
-        bg.Reparent(menu);
+        RNImage(n"bg", RNShapes(), n"cell_bg", n"MainColors.Fullscreen_PrimaryBackgroundDarkest", 0.98).Reparent(menu);
+        RNImage(n"frame", RNShapes(), n"cell_fg", n"MainColors.Red", 1.0).Reparent(menu);
 
         let list = new inkVerticalPanel();
         list.SetName(n"list");
-        list.SetMargin(inkMargin(26.0, 20.0, 0.0, 0.0));
+        list.SetMargin(inkMargin(28.0, 24.0, 0.0, 0.0));
         list.Reparent(menu);
-        let title = RNText(n"menuTitle", 26, n"MainColors.Red");
-        title.SetMargin(inkMargin(0.0, 0.0, 0.0, 14.0));
-        title.SetText(StrUpper(this.m_name));
+        let title = RNText(n"menuTitle", 30, n"MainColors.Red");
+        title.SetMargin(inkMargin(0.0, 0.0, 0.0, 6.0));
+        title.SetText("NC//OS");
         title.Reparent(list);
+        let machine = RNText(n"machine", 22, n"MainColors.Yellow");
+        machine.SetMargin(inkMargin(0.0, 0.0, 0.0, 18.0));
+        machine.SetText(StrUpper(this.m_name));
+        machine.Reparent(list);
         this.AddMenuItem(list, n"app_files", "Files");
         this.AddMenuItem(list, n"app_mail", "Mail");
         this.AddMenuItem(list, n"app_documents", "Documents");
@@ -928,10 +1080,19 @@ public class RNDesktop {
     }
 
     private func AddMenuItem(parent: ref<inkCompoundWidget>, name: CName, label: String) {
-        let item = RNButton(name, label, 30, n"MainColors.Blue");
-        item.SetMargin(inkMargin(0.0, 0.0, 0.0, 12.0));
+        let item = new inkHorizontalPanel();
+        item.SetName(name);
+        item.SetMargin(inkMargin(0.0, 0.0, 0.0, 10.0));
+        item.SetInteractive(true);
         item.Reparent(parent);
         item.RegisterToCallback(n"OnRelease", this, n"OnApp");
+        this.Hover(item);
+        let icon = RNIcon(n"icon", RNAppIcon(name), 44.0, n"MainColors.Blue");
+        icon.Reparent(item);
+        let text = RNText(n"label", 30, n"MainColors.Blue");
+        text.SetMargin(inkMargin(16.0, 4.0, 0.0, 0.0));
+        text.SetText(label);
+        text.Reparent(item);
     }
 
     // --- window management -------------------------------------------------------
@@ -1084,14 +1245,23 @@ public class RNDesktop {
         tasks.RemoveAllChildren();
         for window in this.m_windows {
             let focused = !window.m_minimized && this.m_focusedId == window.m_id;
-            let button = RNButton(StringToName("task" + IntToString(window.m_id)),
-                "[ " + window.m_title + " ]  ", 24, focused ? n"MainColors.Red" : n"MainColors.Blue");
-            button.SetMargin(inkMargin(0.0, 2.0, 0.0, 0.0));
-            if window.m_minimized {
-                button.SetOpacity(0.6);
-            }
+            window.SetFocused(focused);
+            let button = new inkCanvas();
+            button.SetName(StringToName("task" + IntToString(window.m_id)));
+            button.SetSize(250.0, 48.0);
+            button.SetMargin(inkMargin(0.0, 0.0, 10.0, 0.0));
+            button.SetInteractive(true);
             button.Reparent(tasks);
             button.RegisterToCallback(n"OnRelease", this, n"OnTask");
+            this.Hover(button);
+            RNImage(n"bg", RNShapes(), n"cell_bg", focused ? n"MainColors.PanelDarkRed" : n"MainColors.Fullscreen_PrimaryBackgroundDarkest", 0.9).Reparent(button);
+            RNImage(n"frame", RNShapes(), n"cell_fg", n"MainColors.Red", focused ? 1.0 : 0.4).Reparent(button);
+            let label = RNText(n"label", 22, focused ? n"MainColors.Red" : n"MainColors.Blue");
+            label.SetAnchor(inkEAnchor.CenterLeft);
+            label.SetAnchorPoint(Vector2(0.0, 0.5));
+            label.SetMargin(inkMargin(16.0, 0.0, 0.0, 0.0));
+            label.SetText(window.m_minimized ? "(" + RNShorten(window.m_title, 16) + ")" : RNShorten(window.m_title, 18));
+            label.Reparent(button);
         }
         this.UpdateTray();
     }
