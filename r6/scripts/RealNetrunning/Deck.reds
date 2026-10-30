@@ -112,7 +112,8 @@ public class DeckService extends ScriptableService {
             return false;
         }
 
-        let controller = layer.GetGameController();
+        // the layer returns the base controller type; Open needs an inkGameController
+        let controller = layer.GetGameController() as inkGameController;
         if !IsDefined(controller) {
             return false;
         }
