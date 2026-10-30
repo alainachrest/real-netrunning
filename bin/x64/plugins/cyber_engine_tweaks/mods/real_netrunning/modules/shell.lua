@@ -172,10 +172,10 @@ def("jackout", "jackout", "Leave cyberspace.", function()
 	if not ok then out(msg, "err") end
 end)
 
-def("cyber", "cyber [style|walls|scale|sky|debug]", "Where you are in cyberspace. 'cyber style', 'cyber walls', 'cyber scale' and 'cyber sky' change how it looks; 'cyber debug' shows the details.", function(args)
+def("cyber", "cyber [style|walls|scale|light|sky|debug]", "Where you are in cyberspace. 'cyber style', 'cyber walls', 'cyber scale', 'cyber light' and 'cyber sky' change how it looks; 'cyber debug' shows the details.", function(args)
 	if Shell.cyber == nil then out("Cyberspace isn't available.", "err") return end
-	if args[1] == "style" or args[1] == "walls" or args[1] == "scale" or args[1] == "sky" then
-		local ok, msg = Shell.cyber[args[1]](args[2])
+	if args[1] == "style" or args[1] == "walls" or args[1] == "scale" or args[1] == "sky" or args[1] == "light" then
+		local ok, msg = Shell.cyber[args[1]](args[2], args[3])
 		out(msg, ok and "ok" or "err")
 		return
 	end

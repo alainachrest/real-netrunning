@@ -36,6 +36,8 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_floorFit: ref<RNMeshFit>;
     private let m_wallFit: ref<RNMeshFit>;
     private let m_backFit: ref<RNMeshFit>;   // solid backing behind floors and ceilings
+    private let m_lightLevel: Float;   // 'cyber light': brightness multiplier
+    private let m_lightColour: Int32;  // 'cyber light': colour preset
 
     // the size and kind of each block Lua asked for, looked up when it's built
     private let m_pending: Vector4;  // half x, half y, half z, kind
@@ -51,6 +53,8 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_scale = 1.3;
         this.m_style = 2;
         this.m_wallStyle = 3;
+        this.m_lightLevel = 1.0;
+        this.m_lightColour = 0;
         this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
         this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");
@@ -126,6 +130,35 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         template.AddComponent(mesh);
     }
 
+    // A point light that fills a room of the given half width with soft colour.
+    private func AddLight(template: ref<EntityBuilderTemplateWrapper>, half: Float) {
+        let light = new gameLightComponent();
+        light.type = ELightType.LT_Point;
+        light.color = RNLightColour(this.m_lightColour);
+        light.unit = ELightUnit.LU_Lumen;
+        light.intensity = 9000.0 * this.m_lightLevel;
+        light.radius = half * 2.2;
+        light.attenuation = rendLightAttenuation.LA_InverseSquare;
+        light.sceneDiffuse = true;
+        light.sceneSpecularScale = Cast<Uint8>(100);
+        light.scaleVolFog = Cast<Uint8>(40);
+        light.useInTransparents = true;
+        light.useInParticles = true;
+        light.isEnabled = true;
+        let place: WorldTransform;
+        WorldTransform.SetPosition(place, Vector4(0.0, 0.0, 0.0, 1.0));
+        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        light.localTransform = place;
+        template.AddComponent(light);
+    }
+
+    public func SetLight(level: Float, colour: Int32) {
+        this.m_lightLevel = MaxF(0.0, MinF(level, 10.0));
+        this.m_lightColour = Max(0, Min(colour, RNLightColourCount() - 1));
+    }
+    public func LightColourCount() -> Int32 { return RNLightColourCount(); }
+    public func LightColourName(i: Int32) -> String { return RNLightColourName(i); }
+
     private func SizeText(fit: ref<RNMeshFit>) -> String {
         if !IsDefined(fit) || !fit.ready {
             return "not loaded";
@@ -147,6 +180,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // kind 1: wall or door barrier (its mesh fills the box)
     // kind 2: ceiling (the floor mesh upside down, its face on the underside of the box)
     // kind 3: solid dark block (the outer shell of a floor, corner pillars)
+    // kind 4: a light (no collider, nothing to see): the room's own glow
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
         let rotation: EulerAngles;
@@ -191,6 +225,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         }
         let size = this.SizeOf(builder.GetEntityID());
         let kind = RoundF(size.W);
+
+        if kind == 4 {
+            this.AddLight(template, size.X);
+            return;
+        }
 
         // The preset name alone leaves the collision masks empty (collides with
         // nothing), so build the masks from the preset as well.
@@ -393,6 +432,35 @@ public func RNFloorMesh(i: Int32) -> ResRef {
     if i == 4 { return r"base\\environment\\architecture\\_temp\\cyberspace\\cyberspace_module_a.mesh"; }
     if i == 5 { return r"base\\environment\\quests\\q101_cyberspace\\q101_cyberspace_deco_a.mesh"; }
     return r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
+}
+
+// --- room light colours ------------------------------------------------------------
+
+public func RNLightColourCount() -> Int32 { return 5; }
+
+public func RNLightColourName(i: Int32) -> String {
+    if i == 1 { return "Netrunner blue"; }
+    if i == 2 { return "Arasaka red"; }
+    if i == 3 { return "Matrix green"; }
+    if i == 4 { return "Plain white"; }
+    return "Cyberspace cyan";
+}
+
+public func RNLightColour(i: Int32) -> Color {
+    let c: Color;
+    c.Alpha = Cast<Uint8>(255);
+    if i == 1 {
+        c.Red = Cast<Uint8>(70); c.Green = Cast<Uint8>(120); c.Blue = Cast<Uint8>(255);
+    } else if i == 2 {
+        c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(60); c.Blue = Cast<Uint8>(70);
+    } else if i == 3 {
+        c.Red = Cast<Uint8>(90); c.Green = Cast<Uint8>(255); c.Blue = Cast<Uint8>(140);
+    } else if i == 4 {
+        c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(250); c.Blue = Cast<Uint8>(240);
+    } else {
+        c.Red = Cast<Uint8>(120); c.Green = Cast<Uint8>(220); c.Blue = Cast<Uint8>(255);
+    }
+    return c;
 }
 
 // A plain dark box from the game's level design kit, for backing and shells.

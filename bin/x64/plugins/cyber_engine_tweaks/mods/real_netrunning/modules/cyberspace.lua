@@ -250,6 +250,8 @@ local function buildFloor(net, i, f, count)
 		for y = 0, L.h - 1 do
 			local rx, ry = cellCentre(i, L, x, y)
 			block(floor, { x = rx, y = ry, z = cz - 0.5, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.5, kind = 0 })
+			-- each room's own glow, just under the ceiling
+			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight - 0.8, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.1, kind = 4 })
 			-- a ceiling on top of the walls, so nothing outside cyberspace shows
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight + 0.25, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.25, kind = 2 })
 			if x == 0 then wall(floor, "y", rx - r / 2, ry, cz, false) end
@@ -527,6 +529,7 @@ function Cyber.applyLook()
 	local s = state()
 	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
 	World.cyberCall("SetWallStyle", s.walls or Kit.defaultWalls)
+	World.cyberCall("SetLight", s.light or 1.0, s.lightColour or 0)
 	World.cyberCall("SetFloorScale", s.scale or Kit.defaultScale)
 	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
 end
@@ -586,6 +589,30 @@ function Cyber.walls(n)
 	World.cyberCall("SetWallStyle", n)
 	if Cyber.active then Cyber.restyleTimer = 4.0 end
 	return true, "Wall style: " .. tostring(World.cyberCall("WallStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
+end
+
+-- 'cyber light [brightness] [colour]': how the rooms are lit. Brightness 1 is
+-- normal, 0 is off; colour is a number from the list.
+function Cyber.light(level, colour)
+	local s = state()
+	local count = World.cyberCall("LightColourCount") or 0
+	if count == 0 then return false, "Cyberspace lighting needs the r6 scripts." end
+	if level == nil then
+		return true, "Brightness " .. (s.light or 1.0) .. ". 'cyber light <brightness> [colour]', brightness 1 is normal.\nColours:\n" ..
+			listChoices(count, function(i) return World.cyberCall("LightColourName", i) end, s.lightColour or 0)
+	end
+	level = tonumber(level)
+	if level == nil or level < 0 then return false, "Give a brightness of 0 or more, like 0.5 or 2." end
+	s.light = math.min(10, level)
+	if colour ~= nil then
+		colour = math.floor(tonumber(colour) or -1)
+		if colour < 0 or colour >= count then return false, "Pick a colour from 0 to " .. (count - 1) .. "." end
+		s.lightColour = colour
+	end
+	World.cyberCall("SetLight", s.light, s.lightColour or 0)
+	if Cyber.active then Cyber.restyleTimer = 0.1 end
+	return true, "Lights: brightness " .. s.light .. ", " .. tostring(World.cyberCall("LightColourName", s.lightColour or 0)) ..
+		(Cyber.active and "" or " (next time you jack in)")
 end
 
 -- 'cyber scale [x]': resize the floor mesh, if a style comes out too big or small.
