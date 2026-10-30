@@ -25,6 +25,7 @@ function Network.newState()
 		news = {},    -- recent world events, newest last
 		homeFiles = {}, -- documents saved to V's home computers: { name, text }
 		market = nil,   -- created by modules/market on first use
+		gateways = {},  -- closed network addr -> the access point network that bridges to it
 	}
 end
 
@@ -69,6 +70,8 @@ function Network.register(def)
 		about = def.about,
 		district = def.district,
 		junk = def.junk,
+		closed = def.closed == true, -- air-gapped: only reachable through its gateway
+		lab = def.lab,               -- secret corporate lab: { code, subject }
 		fs = nil,     -- built on first use
 		floors = nil, -- built on first use
 	}
@@ -108,6 +111,12 @@ function Network.build()
 			table.insert(hub.reveals, def.addr)
 		end
 	end
+	-- closed networks: registered now so progress is kept, found by jacking in
+	local closed = Lore.closedNetworks(Rng.new(Network.state.seed or 0, "closed"), Network.closedJunkCount, Network.labCount)
+	Network.closedJunk, Network.closedLabs = {}, {}
+	for _, def in ipairs(closed.junk) do Network.register(def) table.insert(Network.closedJunk, def.addr) end
+	for _, def in ipairs(closed.labs) do Network.register(def) table.insert(Network.closedLabs, def.addr) end
+	Network.state.gateways = Network.state.gateways or {}
 	for _, def in pairs(Network.external) do
 		Network.register(def)
 	end
@@ -119,6 +128,55 @@ function Network.build()
 end
 
 Network.junkCount = 48
+Network.closedJunkCount = 14
+Network.labCount = 10
+
+---------------------------------------------------------------------------
+-- Closed networks and their gateways
+---------------------------------------------------------------------------
+
+Network.jacked = nil -- runtime: the network of the device V is jacked into right now
+
+local function unclaimed(list)
+	local free = {}
+	for _, addr in ipairs(list) do
+		if Network.state.gateways[addr] == nil then table.insert(free, addr) end
+	end
+	return free
+end
+
+-- Called when V jacks into a device network. Some of them bridge to a closed
+-- network. Big, guarded sites are more likely to hide a corporate lab.
+-- opts: { kind = "ap" | "computer", devices = n, turrets = n }
+-- Returns the closed network, or nil.
+function Network.gatewayFor(gatewayAddr, opts)
+	opts = opts or {}
+	for addr, gw in pairs(Network.state.gateways) do
+		if gw == gatewayAddr then return Network.nets[addr] end
+	end
+	local rng = Rng.new(Network.state.seed or 0, "gateway", gatewayAddr)
+	local chance = opts.kind == "ap" and 0.35 or (opts.kind == "computer" and 0.15 or 0)
+	if not rng:chance(chance) then return nil end
+	local guarded = (opts.turrets or 0) > 0 or (opts.devices or 0) >= 8
+	local wantLab = opts.kind == "ap" and rng:chance(guarded and 0.7 or 0.15)
+	local pool = unclaimed(wantLab and Network.closedLabs or Network.closedJunk)
+	if #pool == 0 then pool = unclaimed(wantLab and Network.closedJunk or Network.closedLabs) end
+	if #pool == 0 then return nil end
+	local addr = pool[rng:int(1, #pool)]
+	Network.state.gateways[addr] = gatewayAddr
+	return Network.nets[addr]
+end
+
+-- The floor a gateway has to be hacked down to before the bridge opens:
+-- its control floor, or the whole network if it has none.
+function Network.bridgeOpen(gatewayAddr)
+	local gw = Network.nets[gatewayAddr]
+	if gw == nil then return false end
+	for i, f in ipairs(Network.floors(gw)) do
+		if f.kind == "control" then return Network.isFloorOpen(gatewayAddr, i) end
+	end
+	return Network.isOwned(gatewayAddr)
+end
 
 ---------------------------------------------------------------------------
 -- Reach: off-world regions need an uplink
@@ -134,6 +192,10 @@ function Network.hasUplink(region)
 end
 
 function Network.canReach(net)
+	if net.closed then
+		local gw = Network.state.gateways[net.addr]
+		return gw ~= nil and Network.jacked == gw and Network.bridgeOpen(gw)
+	end
 	return Network.hasUplink(net.region)
 end
 

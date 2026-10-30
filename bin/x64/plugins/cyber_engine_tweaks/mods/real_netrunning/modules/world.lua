@@ -184,6 +184,18 @@ local function entityFor(device)
 	return entity
 end
 
+-- Metres between V and a device, or nil when the game can't tell (then callers allow it).
+function World.distanceTo(device)
+	if device == nil or device.id == nil then return nil end
+	return try(function()
+		local entity = Game.FindEntityByID(device.id)
+		local player = Game.GetPlayer()
+		if player == nil then return nil end
+		if entity == nil then return math.huge end -- streamed out: V is far away
+		return Vector4.Distance(player:GetWorldPosition(), entity:GetWorldPosition())
+	end)
+end
+
 -- Actions per device kind. Each returns a message for the terminal.
 local actions = {
 	door = {

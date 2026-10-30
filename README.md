@@ -38,7 +38,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | Command | What it does |
 | --- | --- |
 | `help` | List commands |
-| `scan [filter]` | List networks you know, grouped by region. Filter with a region (`nc`, `nusa`, `pacific`, `eu`, `orbit`), `local` for small nets, `corp`, or any word |
+| `scan [filter]` | List networks you know, grouped by region. Filter with a region (`nc`, `nusa`, `pacific`, `eu`, `orbit`, `closed`), `local` for small nets, `corp`, or any word |
 | `uplinks` | Which regions beyond Night City you can reach, and what to root to reach the rest |
 | `connect <address>` | Connect to a network |
 | `map` | Show the network's floors and what blocks each one |
@@ -51,7 +51,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `market` | Stock prices |
 | `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
 | `portfolio` | Your shares and their value |
-| `jack` | Jack into the device you're looking at. Devices wired to an access point join its whole network |
+| `jack` | Jack into the device you're looking at. Devices wired to an access point join its whole network, and some access points bridge to closed networks |
 | `devices` | List the real devices on an access point network (once its control floor is open) |
 | `device <number> <action>` | Control one of them (doors: open, close, lock, unlock; cameras and turrets: on, off). On a single device, just `device <action>` |
 | `fight` | Fight a NetWatch agent that has entered your network |
@@ -90,6 +90,17 @@ Each save also has 48 small networks scattered across Night City's districts: no
 - The public subnet leads to one in each district. Each one you own points to a couple more.
 - They're easy and pay little, but ripperdocs, BD parlours and netrunners' rigs are worth more, and the odd dead node still has something inside.
 - `scan local` lists only these.
+
+## Closed networks
+
+Some networks are air-gapped: you can't reach them over the Net at all. Each one is bridged from a single device somewhere in the world, and the only way in is to go there and jack in.
+
+- When you `jack` into an access point (or, more rarely, a computer), it may turn out to be wired to a closed network. The deck tells you, and the network shows up in `scan closed` and the browser's directory.
+- Hack the access point down to its control floor to open the bridge, then `connect` to the closed network while you're still jacked in there. Walk away or connect elsewhere and you're unplugged.
+- Most are private: fixers' stash servers, smugglers' manifests, gang safehouses, ripperdocs' offline archives, building security cores, home servers and netrunners' offline vaults.
+- Some are **secret corporate research labs**, more likely behind access points that guard turrets or lots of devices. Each runs an off-books project under a codename, such as Militech's autonomous hunter drones or Zetatech's self-learning daemon. Their ICE is the hardest in Night City, and their research files are worth a fortune.
+- Selling research raises your heat. Leaking it to the press exposes the project by name and hits the company's stock harder than any other leak.
+- Each save has 14 private closed networks and 10 labs. Which device leads to which is decided the first time you jack into it, and stays that way.
 
 ## NetWatch
 
@@ -135,7 +146,7 @@ if rn and rn.api and rn.api.apiVersion >= 1 then
 end
 ```
 
-Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `netwatch.tier`, `netwatch.agent_spawn`, `netwatch.agent_arrived`, `netwatch.agent_defeated`, `netwatch.agent_won`, `netwatch.world_attack`, `network.revealed`, `network.breached`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
+Events: `hack.breach`, `hack.download`, `hack.connected`, `hack.disconnected`, `netwatch.traced`, `netwatch.heat`, `netwatch.tier`, `netwatch.agent_spawn`, `netwatch.agent_arrived`, `netwatch.agent_defeated`, `netwatch.agent_won`, `netwatch.world_attack`, `network.revealed`, `network.breached`, `network.closed_found`, `device.action`, `world.faction_score`, `cyberscript.variable`, or `*` for all.
 
 ## Credits
 

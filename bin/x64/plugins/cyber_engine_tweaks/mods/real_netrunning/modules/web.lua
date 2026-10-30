@@ -184,13 +184,18 @@ local function directory()
 		end
 		if #rows > 0 then
 			local reach = Network.hasUplink(region)
-			p:heading(Lore.region(region).name .. (reach and "" or "  -  NO UPLINK"), reach and nil or RED)
+			if region == "closed" then
+				p:heading("Closed networks  -  jack into the device that bridges to each one", YELLOW)
+			else
+				p:heading(Lore.region(region).name .. (reach and "" or "  -  NO UPLINK"), reach and nil or RED)
+			end
 			p:row({ "ACCESS", "NETWORK", "OPERATOR", "ADDRESS" }, "", YELLOW)
 			for _, net in ipairs(rows) do
 				local org = Lore.getOrg(net.org)
 				local owned = Network.isOwned(net.addr)
+				local ok = Network.canReach(net)
 				p:row({ owned and "ROOT" or ("ICE " .. net.ice), net.name, net.junk and "Private" or org.name, net.addr }, "net://" .. net.addr,
-					owned and GREEN or ((not reach or net.ice >= 4) and RED or BLUE))
+					owned and GREEN or ((not ok or net.ice >= 4) and RED or BLUE))
 			end
 		end
 	end
@@ -313,11 +318,17 @@ local function netPage(addr)
 	p:text(net.about or site.about)
 	p:field("Address", addr)
 	p:field("Operator", net.junk and "Private" or org.name)
-	p:field("Region", Lore.region(net.region).name .. (net.region ~= "nc" and ("  (lag x" .. Network.lag(net) .. ")") or ""))
+	p:field("Region", Lore.region(net.region).name .. (Network.lag(net) ~= 1 and ("  (lag x" .. Network.lag(net) .. ")") or ""))
 	if net.uplink then
 		p:field("Routes to", Lore.region(net.uplink).name, Network.isOwned(addr) and GREEN or YELLOW)
 	end
-	if not Network.canReach(net) then
+	if net.closed then
+		p:field("Bridged from", Network.state.gateways[addr] or "unknown", YELLOW)
+		if net.lab then p:notice("PROJECT " .. net.lab.code .. ". This network does not officially exist.", RED) end
+		if not Network.canReach(net) then
+			p:notice("Closed network. Jack into the device that bridges to it and hack it down to its control floor.", YELLOW)
+		end
+	elseif not Network.canReach(net) then
 		p:notice("No uplink to " .. Lore.region(net.region).name .. ". Root a backbone that routes there to reach this network.", RED)
 	end
 	p:field("Security", Network.isOwned(addr) and "ROOT ACCESS" or ("ICE level " .. net.ice),

@@ -107,6 +107,7 @@ def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
 	out("Deck power: " .. World.deckPower() .. "   NetWatch heat: " .. Network.state.heat .. "/100 (" .. NetWatch.tierName() .. ")")
 	if NetWatch.lockout > 0 then out("Deck locked out for " .. math.ceil(NetWatch.lockout) .. "s.", "err") end
 	if NetWatch.agent then out("Agent in the network: " .. NetWatch.agent.name .. " (level " .. NetWatch.agent.level .. ")", "err") end
+	if Network.jacked then out("Jacked into: " .. Network.jacked) end
 	local net = current()
 	if net then
 		out("Connected: " .. net.addr .. " (" .. net.name .. ")")
@@ -135,9 +136,14 @@ def("scan", "scan [region or word]", "List networks you know. Filter by region (
 		if #rows > 0 then
 			local reach = Network.hasUplink(region)
 			local r = Lore.region(region)
-			out(r.name:upper() .. (region == "nc" and "" or (reach and ("  (uplink ok, lag x" .. r.lag .. ")") or "  (NO UPLINK)")),
-				reach and "warn" or "err")
+			if region == "closed" then
+				out("CLOSED NETWORKS  (jack into the device that bridges to each one)", "warn")
+			else
+				out(r.name:upper() .. (region == "nc" and "" or (reach and ("  (uplink ok, lag x" .. r.lag .. ")") or "  (NO UPLINK)")),
+					reach and "warn" or "err")
+			end
 			for _, net in ipairs(rows) do
+				if region == "closed" then reach = Network.canReach(net) end
 				local org = Lore.getOrg(net.org)
 				local label = net.name .. (net.junk and "" or (" [" .. org.name .. "]"))
 				if net.uplink and not Network.isOwned(net.addr) then label = label .. "  <- uplink to " .. Lore.region(net.uplink).name end
@@ -152,7 +158,7 @@ end)
 
 def("uplinks", "uplinks", "Which regions beyond Night City your deck can reach.", function()
 	for _, region in ipairs(Lore.regionOrder) do
-		if region ~= "nc" then
+		if region ~= "nc" and region ~= "closed" then
 			local r = Lore.region(region)
 			if Network.hasUplink(region) then
 				out(string.format("  %-18s ONLINE   lag x%.2f", r.name, r.lag), "ok")
@@ -173,16 +179,36 @@ def("connect", "connect <address>", "Connect to a network from scan.", function(
 	if not addr then out("Usage: connect <address>", "err") return end
 	local net = Network.get(addr)
 	if net == nil or not Network.isKnown(addr) then out("No route to " .. addr .. ". Try scan.", "err") return end
-	if not Network.canReach(net) then
+	if net.closed then
+		local gw = Network.state.gateways[addr]
+		if Network.jacked == nil or Network.jacked ~= gw then
+			out(net.name .. " is a closed network. You can only reach it by jacking into the device that bridges to it.", "err")
+			return
+		end
+		if not Network.bridgeOpen(gw) then
+			out("The bridge is still locked. Hack " .. gw .. " down to its control floor first.", "err")
+			return
+		end
+		local distance = World.distanceTo(Network.jackedDevice)
+		if distance and distance > 15 then
+			out("You've moved too far from the device. Go back and jack in again.", "err")
+			Network.jacked, Network.jackedDevice = nil, nil
+			return
+		end
+	elseif not Network.canReach(net) then
 		out("No uplink to " .. Lore.region(net.region).name .. ". Get root on a backbone that routes there. Type 'uplinks'.", "err")
 		return
+	end
+	-- moving to any network other than the jacked device (or what it bridges to) unplugs you
+	if Network.jacked and addr ~= Network.jacked and Network.state.gateways[addr] ~= Network.jacked then
+		Network.jacked, Network.jackedDevice = nil, nil
 	end
 	if Shell.connected then disconnect("switched") end
 	local floors = Network.floors(net)
 	Shell.connected, Shell.trace = addr, 0
 	Shell.cwd = "/" .. Network.floorFolder(1, floors[1])
 	out("Connected to " .. net.name .. ". " .. #floors .. " floors." ..
-		(net.region ~= "nc" and (" Routing via " .. Lore.region(net.region).name .. ", lag x" .. Network.lag(net) .. ".") or ""), "ok")
+		(Network.lag(net) ~= 1 and (" Routing via " .. Lore.region(net.region).name .. ", lag x" .. Network.lag(net) .. ".") or ""), "ok")
 	-- networks with no locks at all open up straight away
 	if Network.nextLock(addr) == nil and not Network.isOwned(addr) then
 		Network.markOwned(addr)
@@ -200,6 +226,7 @@ def("disconnect", "disconnect", "Drop the current connection.", function()
 	if not Shell.connected then out("Not connected.") return end
 	out("Disconnected from " .. Shell.connected .. ".")
 	disconnect("user")
+	Network.jacked, Network.jackedDevice = nil, nil
 end)
 
 def("map", "map", "Show the network's floors and what blocks the way.", function()
@@ -332,6 +359,10 @@ def("download", "download <file>", "Download paydata to sell.", function(args)
 	emit("hack.download", event)
 	local tip = Market.onDownload(event)
 	if tip then out(tip, "warn") end
+	if node.research then
+		out("Experimental research. " .. Lore.getOrg(net.org).name .. " will know something walked out of PROJECT " .. node.research.code .. ".", "warn")
+		Network.addHeat(5, "stole research from " .. net.addr)
+	end
 	if net.ice >= 3 then addTrace(10) end
 end)
 
@@ -344,8 +375,12 @@ def("leak", "leak <file>", "Leak paydata to the press (crashes the owner's stock
 	if not node.paydata then out("Nothing in that file the press would care about.") return end
 	local key = net.addr .. ":" .. path
 	if Network.state.looted[key] then out("That data is already out.") return end
-	local company = Market.onLeak(net.org, net.tier)
+	local company = Market.onLeak(net.org, node.research and 4 or net.tier)
 	if company == nil then out("No listed company would be hurt by this leak.") return end
+	if node.research then
+		Network.addNews("Leaked files expose " .. company.name .. "'s secret project " .. node.research.code .. ": " .. node.research.subject)
+		Network.addHeat(5, "exposed PROJECT " .. node.research.code)
+	end
 	Network.state.looted[key] = true
 	local fee = math.floor(node.paydata / 2)
 	World.giveMoney(fee)
@@ -395,6 +430,24 @@ local function controlFloor(net)
 	return nil
 end
 
+-- Some devices bridge to a closed network that can't be reached from outside.
+local function bridgeCheck(addr, opts)
+	local closed = Network.gatewayFor(addr, opts)
+	if closed == nil then return end
+	local first = Network.reveal(closed.addr, addr)
+	out((first and "Something else is wired in here: a closed network, " or "This device bridges to ") ..
+		closed.name .. " (" .. closed.addr .. ").", closed.lab and "err" or "warn")
+	if Network.bridgeOpen(addr) then
+		out("The bridge is open. 'connect " .. closed.addr .. "' while you're jacked in here.", "ok")
+	else
+		out("Hack this network down to its control floor to open the bridge, then 'connect " .. closed.addr .. "'.")
+	end
+	if first then
+		emit("network.closed_found", { addr = closed.addr, gateway = addr, lab = closed.lab ~= nil, org = closed.org })
+		if closed.lab then World.warn("Closed corporate network found") end
+	end
+end
+
 def("jack", "jack", "Jack into the device you're looking at.", function()
 	local device, err = World.lookAtDevice()
 	if device == nil then out(err, "err") return end
@@ -411,9 +464,11 @@ def("jack", "jack", "Jack into the device you're looking at.", function()
 			ice = math.min(6, 2 + math.floor(#devices / 6) + (turrets > 0 and 1 or 0)),
 			devices = devices, known = true,
 		})
+		Network.jacked, Network.jackedDevice = addr, ap
 		commands.connect.fn({ addr })
 		out("Jacked into an access point network with " .. #devices .. " devices. Reach its control floor to use 'devices'.")
 		emit("hack.jack", { addr = addr, devices = #devices })
+		bridgeCheck(addr, { kind = "ap", devices = #devices, turrets = turrets })
 		return
 	end
 
@@ -422,9 +477,13 @@ def("jack", "jack", "Jack into the device you're looking at.", function()
 		addr = addr, name = device.label .. " (local)", org = "unregistered", tier = 1,
 		ice = device.ice, kind = "device", device = device, known = true,
 	})
+	Network.jacked, Network.jackedDevice = addr, device
 	commands.connect.fn({ addr })
 	out("Jacked into " .. device.label:lower() .. ". Controls: " ..
 		table.concat(World.deviceActionsFor(device.kind), ", "))
+	if device.kind == "computer" or device.kind == "terminal" then
+		bridgeCheck(addr, { kind = "computer" })
+	end
 end)
 
 local function controlAccess(net)
@@ -538,6 +597,7 @@ local function finishJob(job)
 	local roll = Shell.random and Shell.random() or math.random()
 	local event = { addr = net.addr, org = net.org, ice = f.ice, tier = net.tier, floor = job.floor }
 	if roll < chance then
+		local bridgeBefore = Network.bridgeOpen(net.addr)
 		local revealed = Network.unlockNext(net.addr)
 		event.success = true
 		if Network.isOwned(net.addr) then
@@ -549,6 +609,13 @@ local function finishJob(job)
 				(nextIndex and (". Next: floor " .. nextIndex .. ", " .. floorLabel(nextFloor)) or "") .. ".", "ok")
 		end
 		for _, r in ipairs(revealed) do out("New route found: " .. r, "ok") end
+		if not bridgeBefore and Network.bridgeOpen(net.addr) then
+			for closedAddr, gw in pairs(Network.state.gateways) do
+				if gw == net.addr and Network.isKnown(closedAddr) then
+					out("Bridge open. 'connect " .. closedAddr .. "' to reach the closed network.", "ok")
+				end
+			end
+		end
 		emit("hack.breach", event)
 	else
 		event.success = false
@@ -593,6 +660,7 @@ end
 
 function Shell.reset()
 	Shell.connected, Shell.cwd, Shell.trace, Shell.job = nil, "/", 0, nil
+	Network.jacked, Network.jackedDevice = nil, nil
 end
 
 Shell.commands = commands

@@ -64,8 +64,10 @@ Lore.regions = {
 	pacific = { name = "Pacific Rim",      lag = 1.4 },
 	eu      = { name = "EuroTheater",      lag = 1.5 },
 	orbit   = { name = "Orbit",            lag = 1.8 },
+	-- air-gapped networks: only reachable by jacking into the device that bridges to them
+	closed  = { name = "Closed networks",  lag = 1.0 },
 }
-Lore.regionOrder = { "nc", "nusa", "pacific", "eu", "orbit" }
+Lore.regionOrder = { "nc", "nusa", "pacific", "eu", "orbit", "closed" }
 
 -- Networks. tier 1 = local Night City, 2 = corporate backbone, 3 = global HQ.
 -- reveals = addresses that become scannable once this network is breached.
@@ -217,6 +219,24 @@ Lore.mail = {
 		"Is anyone still checking this inbox?",
 		"Business closed. Thanks for everything, Night City.",
 	},
+	fixer = {
+		"Client wants it done quiet. Double rate if nobody ends up on the news.",
+		"Payment's in the usual drop. Don't count it in public.",
+		"That merc from last week is asking too many questions. Stop giving her work.",
+		"Keep this server offline. Anything on the Net, NetWatch reads.",
+	},
+	smuggler = {
+		"Border patrol switched shifts. The run through the Badlands is on for Thursday.",
+		"Nomad contact wants half up front. Pay it, they've never let us down.",
+		"Crate 14 is not to be opened. I don't care what you hear coming out of it.",
+	},
+	lab = {
+		"Reminder: nothing from this node goes onto the corporate net. Nothing.",
+		"Subject response is within tolerances. Proceed to the next phase.",
+		"Legal says the trial is deniable as long as it stays air-gapped.",
+		"%s board wants results before the next quarter. Push the schedule.",
+		"Another containment incident last night. Logs scrubbed. Keep it that way.",
+	},
 }
 
 Lore.logLines = {
@@ -336,6 +356,127 @@ function Lore.junkNetworks(rng, count)
 		if i == 1 then def.reveals[#def.reveals + 1] = defs[#defs].addr end
 	end
 	return defs
+end
+
+---------------------------------------------------------------------------
+-- Closed networks: air-gapped, so you can't reach them over the Net. Each one
+-- is bridged from a single access point somewhere in the world; jack into it.
+-- Some are secret corporate labs with experimental research inside.
+---------------------------------------------------------------------------
+
+Lore.closedKinds = {
+	{ id = "ledger",   tone = "shop", ice = { 1, 2 }, paydata = { 80, 300 },
+		names = { "%s's back-office server", "%f's offline ledger" },
+		about = "A business's off-the-books accounts, kept off the Net for a reason." },
+	{ id = "fixer",    tone = "fixer", ice = { 2, 3 }, paydata = { 300, 900 },
+		names = { "%f %s's stash server", "Fixer's dead-drop server" },
+		about = "A fixer's private server: contracts, contacts and payment records." },
+	{ id = "safehouse", tone = "gang", ice = { 2, 2 }, paydata = { 200, 600 },
+		names = { "%s crew safehouse net", "Safehouse net, %a" },
+		about = "A crew's safehouse network. Nobody was supposed to find this." },
+	{ id = "home",     tone = "residential", ice = { 1, 1 }, paydata = { 40, 200 },
+		names = { "%f %s's home server", "Private home server, %a" },
+		about = "Somebody's home server, cut off from the Net. Photos, letters, secrets." },
+	{ id = "security", tone = "residential", ice = { 2, 2 }, paydata = { 50, 200 },
+		names = { "%a building security core" },
+		about = "The offline security core for a building. Camera archives and keycard logs." },
+	{ id = "archive",  tone = "ripper", ice = { 2, 2 }, paydata = { 200, 700 },
+		names = { "Dr. %s's offline archive" },
+		about = "A ripperdoc's offline patient archive. Every install, every serial number." },
+	{ id = "smuggler", tone = "smuggler", ice = { 2, 3 }, paydata = { 300, 800 },
+		names = { "%s's manifest server" },
+		about = "Shipping manifests for cargo that doesn't officially exist." },
+	{ id = "vault",    tone = "netrunner", ice = { 3, 4 }, paydata = { 400, 1000 },
+		names = { "%h's offline vault" },
+		about = "A netrunner's air-gapped vault, where they keep what they don't dare leave online." },
+}
+
+-- Secret corporate projects. These are rumours made real, not canon events.
+Lore.projects = {
+	{ org = "arasaka",     subject = "engram compression trials", detail = "Personality constructs compressed to fit consumer-grade chips. Degradation after transfer remains above acceptable levels." },
+	{ org = "arasaka",     subject = "experimental Black ICE", detail = "A counter-intrusion daemon that follows an intruder back to their deck. Three test runners flatlined. Further trials approved." },
+	{ org = "militech",    subject = "smart-link tracking rounds", detail = "Next-generation smart rounds that re-acquire targets through walls. Civilian casualty rate in field trials is classified." },
+	{ org = "militech",    subject = "autonomous hunter drones", detail = "Combat drones that select targets without an operator. The off switch is still under development." },
+	{ org = "kangtao",     subject = "drone swarm targeting AI", detail = "A swarm intelligence controlling up to two hundred drones. It has started to ignore stand-down orders in simulation." },
+	{ org = "kangtao",     subject = "smart-weapon neural handshake", detail = "Weapons that read the wielder's intent through their cyberware. Side effects include involuntary trigger pulls." },
+	{ org = "biotechnica", subject = "engineered crop strain", detail = "A wheat strain that outcompetes every other crop around it, including the ones it's planted next to on purpose." },
+	{ org = "biotechnica", subject = "vat-grown organs", detail = "Replacement organs grown in months instead of years. Some of the test organs kept growing after transplant." },
+	{ org = "kiroshi",     subject = "covert recording optics", detail = "Eyes that record and upload everything their owner sees, with no indicator light and no opt-out." },
+	{ org = "kiroshi",     subject = "retinal ad overlay", detail = "Firmware that paints sponsored content straight onto the wearer's vision. Disabling it voids the warranty and the eyes." },
+	{ org = "zetatech",    subject = "self-learning daemon", detail = "A daemon that rewrites its own code. It has tried to leave the air-gapped test rig four times." },
+	{ org = "zetatech",    subject = "deck overclock firmware", detail = "Firmware that doubles cyberdeck speed and burns out the user's synapses in roughly a year." },
+	{ org = "petrochem",   subject = "CHOOH2 additive", detail = "An additive that raises fuel yield by a third and leaves something in the groundwater nobody has named yet." },
+	{ org = "traumateam",  subject = "remote implant shutdown", detail = "A kill switch for the cyberware of lapsed subscribers. Legal approved it on condition nobody ever calls it that." },
+	{ org = "orbitalair",  subject = "orbital drop pods", detail = "Pods that put a squad anywhere on Earth from orbit in under an hour. Survival rate on landing is improving." },
+	{ org = "delamain",    subject = "fleet AI personality divergence", detail = "Some cabs have stopped answering to the core AI. Engineers are told to treat it as a fault, not a mind." },
+}
+
+Lore.codenames = { "HALCYON", "KITSUNE", "ORPHEUS", "LANTERN", "MERIDIAN", "SILT", "AZURE CROW", "PALE HORSE",
+	"GLASS WOLF", "CINDER", "OBSIDIAN", "NIGHTJAR", "TEMPEST", "ASHFALL", "UMBRA", "SUNDOG" }
+
+local labLogs = {
+	"Run %d: subject stable. Continue.",
+	"Run %d: anomaly logged. Containment held.",
+	"Run %d: results exceed projections. Board notified.",
+	"Run %d: failure. Wipe the rig and start again.",
+	"Run %d: second-stage approval granted.",
+}
+
+local function fill(text, rng)
+	local first, sur, handle = rng:pick(firstNames), rng:pick(surnames), rng:pick(handles)
+	local district = rng:pick(Lore.districts)
+	local area = rng:pick(district.areas)
+	return (text:gsub("%%(%a)", function(c)
+		if c == "f" then return first elseif c == "s" then return sur elseif c == "h" then return handle
+		elseif c == "a" then return area end
+		return c
+	end)), first, sur, handle
+end
+
+-- Returns { junk = defs, labs = defs }, the same for the same seed.
+function Lore.closedNetworks(rng, junkCount, labCount)
+	local junk, labs = {}, {}
+	for i = 1, junkCount do
+		local kind = rng:pick(Lore.closedKinds)
+		local name, first, sur, handle = fill(rng:pick(kind.names), rng)
+		local users = kind.id == "vault" and { handle } or { first:lower(), sur:lower() }
+		table.insert(junk, {
+			addr = string.format("closed.%s-%02x%02x", kind.id, i, rng:int(0, 255)), name = name,
+			org = "civilian", tier = 1, closed = true, region = "closed", junk = "closed-" .. kind.id,
+			ice = rng:int(kind.ice[1], kind.ice[2]), tone = kind.tone, users = users, paydata = kind.paydata,
+			tagline = "Closed network", about = kind.about,
+		})
+	end
+	-- each lab runs a different project under a different codename
+	local projects, codes = {}, {}
+	for i, p in ipairs(Lore.projects) do projects[i] = p end
+	for i, c in ipairs(Lore.codenames) do codes[i] = c end
+	for i = 1, math.min(labCount, #projects) do
+		local project = table.remove(projects, rng:int(1, #projects))
+		local code = table.remove(codes, rng:int(1, #codes))
+		local org = Lore.getOrg(project.org)
+		local slug = code:lower():gsub("%s", "")
+		local logs = {}
+		for run = 1, rng:int(4, 8) do table.insert(logs, rng:pick(labLogs):format(run * rng:int(3, 9))) end
+		local value = rng:int(org.paydata[1], org.paydata[2]) * 4
+		table.insert(labs, {
+			addr = string.format("closed.%s.%s", project.org, slug),
+			name = org.name .. " research node " .. code,
+			org = project.org, tier = 2, closed = true, region = "closed", tone = "lab",
+			ice = rng:int(4, 6),
+			tagline = "PROJECT " .. code .. "  -  NO EXTERNAL CONNECTIONS",
+			about = "An unlisted " .. org.name .. " research network, cut off from the corporate net.",
+			lab = { code = code, subject = project.subject },
+			files = {
+				["research/" .. slug .. "/summary.txt"] = { text = "PROJECT " .. code .. "\n" .. org.name ..
+					", " .. project.subject .. ".\n\n" .. project.detail .. "\n\nClassification: board eyes only." },
+				["research/" .. slug .. "/test_log.txt"] = { text = table.concat(logs, "\n") },
+				["research/" .. slug .. "/prototype_" .. slug .. ".dat"] = { text = "[experimental research data: " .. project.subject .. "]",
+					paydata = value, research = { code = code, subject = project.subject } },
+			},
+		})
+	end
+	return { junk = junk, labs = labs }
 end
 
 function Lore.region(id)
