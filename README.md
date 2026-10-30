@@ -40,20 +40,26 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `help` | List commands |
 | `scan` | List networks your deck can reach |
 | `connect <address>` | Connect to a network |
-| `breach` | Break the ICE on the current network (raises trace) |
+| `map` | Show the network's floors and what blocks each one |
+| `breach` | Break the ICE on the next locked floor (raises trace) |
+| `password <code>` | Open a password gate (codes hide in mail on earlier floors) |
+| `crack` | Brute-force a password gate instead (slow, raises trace) |
 | `ls`, `cd`, `cat` | Browse and read files once you have access |
 | `download <file>` | Sell paydata for eddies (corporate data may carry an insider tip) |
 | `leak <file>` | Leak paydata to the press: the owner's stock crashes, the journalist pays a little |
 | `market` | Stock prices |
 | `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
 | `portfolio` | Your shares and their value |
-| `jack` | Jack into the door, camera, turret, computer or access point you're looking at |
-| `device <action>` | Control a jacked device (doors: open, close, lock, unlock; cameras and turrets: on, off) |
+| `jack` | Jack into the device you're looking at. Devices wired to an access point join its whole network |
+| `devices` | List the real devices on an access point network (once its control floor is open) |
+| `device <number> <action>` | Control one of them (doors: open, close, lock, unlock; cameras and turrets: on, off). On a single device, just `device <action>` |
 | `status` | Deck power, trace and NetWatch heat |
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
+- Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
 - Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually Arasaka in Tokyo.
+- Progress through each network's floors is saved, so you can come back and carry on.
 - Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.

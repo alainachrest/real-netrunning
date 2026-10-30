@@ -145,10 +145,11 @@ function Native.pushMachineFiles(key)
 	if svc == nil or net == nil then return end
 	local files = {}
 	flatten(Network.fs(net), "", files)
-	local locked = not Network.isOwned(addr)
 	call(function()
 		svc:ClearMachineFiles(key)
-		for _, f in ipairs(files) do svc:AddMachineFile(key, f.path, f.text, locked) end
+		for _, f in ipairs(files) do
+			svc:AddMachineFile(key, f.path, f.text, not Network.canAccess(net, f.path))
+		end
 		svc:MachineFilesReady(key)
 	end)
 end
@@ -169,9 +170,8 @@ local function handleMachineRequest(request)
 	Native.pushMachineFiles(key)
 end
 
--- After a breach the computer's system files unlock.
+-- When a computer's floors open, its locked files unlock on the desktop.
 function Native.onBreached(e)
-	if e.kind ~= "computer" then return end
 	for key, addr in pairs(Native.machines) do
 		if addr == e.addr then Native.pushMachineFiles(key) end
 	end

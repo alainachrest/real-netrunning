@@ -18,7 +18,8 @@ function Network.newState()
 		schema = 1,
 		seed = nil,
 		known = {},   -- addr -> true once V can scan it
-		owned = {},   -- addr -> true once breached
+		owned = {},   -- addr -> true once the core floor is breached
+		depth = {},   -- addr -> how many floors are open (1 = only the lobby)
 		looted = {},  -- "addr:path" -> true once paydata was downloaded
 		heat = 0,     -- NetWatch heat, 0-100
 		news = {},    -- recent world events, newest last
@@ -56,9 +57,11 @@ function Network.register(def)
 		reveals = def.reveals or {},
 		kind = def.kind or "lore",
 		device = def.device,
+		devices = def.devices,       -- access point networks: the real devices wired to it
 		site = def.site,
 		extraFiles = def.files,
-		fs = nil, -- built on first use
+		fs = nil,     -- built on first use
+		floors = nil, -- built on first use
 	}
 	if Network.nets[net.addr] == nil then table.insert(Network.order, net.addr) end
 	Network.nets[net.addr] = net
@@ -116,6 +119,7 @@ function Network.markOwned(addr)
 	local net = Network.nets[addr]
 	if net == nil or Network.state.owned[addr] then return {} end
 	Network.state.owned[addr] = true
+	Network.state.depth[addr] = #Network.floors(net)
 	local revealed = {}
 	for _, r in ipairs(net.reveals) do
 		if Network.reveal(r, addr) then table.insert(revealed, r) end
@@ -150,7 +154,140 @@ function Network.addNews(text)
 end
 
 ---------------------------------------------------------------------------
--- Filesystem (generated, deterministic per save)
+-- Architecture: every network is a stack of floors (as in Cyberpunk Red).
+--
+--   lobby     always open, public files
+--   ice       an ICE program; break it with 'breach'
+--   black     Black ICE; like ice, but failing hurts
+--   password  a gate; 'password <code>' (codes hide in earlier files) or 'crack'
+--   files     open once reached: users, logs, mail, paydata
+--   control   open once reached: the devices this network runs
+--   core      root; breaching it owns the whole network
+---------------------------------------------------------------------------
+
+local LOCKED = { ice = true, black = true, password = true, core = true }
+
+local passwords = {
+	"KIROSHI", "SAKURA", "CHROME", "NEONRAIN", "SILVERHAND", "SAMURAI", "AFTERLIFE",
+	"BADLANDS", "PACIFICA", "DATAKRASH", "BARTMOSS", "MIKOSHI", "RELIC", "TOTENTANZ",
+}
+
+local function floor(kind, ice, extra)
+	local f = { kind = kind, ice = ice or 0 }
+	if extra then for k, v in pairs(extra) do f[k] = v end end
+	return f
+end
+
+local function buildFloors(net)
+	local rng = Rng.new(Network.state.seed or 0, "arch", net.addr)
+	local floors = { floor("lobby") }
+
+	if net.kind == "site" or net.ice == 0 then
+		table.insert(floors, floor("files"))
+		table.insert(floors, floor("core", 0))
+		return floors
+	end
+
+	if net.kind == "device" then
+		table.insert(floors, floor("ice", net.ice))
+		table.insert(floors, floor("control"))
+		table.insert(floors, floor("core", 0))
+		return floors
+	end
+
+	if net.kind == "computer" then
+		table.insert(floors, floor("ice", net.ice))
+		table.insert(floors, floor("files"))
+		table.insert(floors, floor("core", 0))
+		return floors
+	end
+
+	if net.kind == "ap" then
+		table.insert(floors, floor("ice", math.max(1, net.ice - 1)))
+		if net.ice >= 3 then table.insert(floors, floor("password", net.ice, { password = rng:pick(passwords) .. rng:int(10, 99) })) end
+		table.insert(floors, floor("files"))
+		table.insert(floors, floor("control"))
+		table.insert(floors, floor("core", net.ice))
+		return floors
+	end
+
+	-- lore networks: deeper the harder they are
+	local middle = 1 + math.floor(net.ice / 2) + (net.tier - 1)
+	local hasFiles = false
+	for i = 1, middle do
+		local roll = rng:next()
+		if i == 1 then
+			table.insert(floors, floor("ice", math.max(1, net.ice - 1)))
+		elseif roll < 0.4 then
+			local black = net.ice >= 5 and rng:chance(0.5)
+			table.insert(floors, floor(black and "black" or "ice", net.ice))
+		elseif roll < 0.65 then
+			table.insert(floors, floor("password", net.ice, { password = rng:pick(passwords) .. rng:int(10, 99) }))
+		else
+			table.insert(floors, floor("files"))
+			hasFiles = true
+		end
+	end
+	if not hasFiles then table.insert(floors, floor("files")) end
+	table.insert(floors, floor("core", net.ice))
+	return floors
+end
+
+function Network.floors(net)
+	if net.floors == nil then net.floors = buildFloors(net) end
+	return net.floors
+end
+
+function Network.floorFolder(index, f)
+	return string.format("%02d_%s", index, f.kind)
+end
+
+local function isLocked(f)
+	return LOCKED[f.kind] == true and not (f.kind == "core" and f.ice == 0)
+end
+
+-- How many floors are open. Open floors right after an unlocked one open too.
+function Network.depth(addr)
+	local net = Network.nets[addr]
+	if net == nil then return 0 end
+	local floors = Network.floors(net)
+	if Network.state.owned[addr] then return #floors end
+	local depth = Network.state.depth[addr] or 1
+	while depth < #floors and not isLocked(floors[depth + 1]) do depth = depth + 1 end
+	return depth
+end
+
+-- The next locked floor: index, floor (nil when everything is open).
+function Network.nextLock(addr)
+	local net = Network.nets[addr]
+	if net == nil then return nil end
+	local floors = Network.floors(net)
+	local depth = Network.depth(addr)
+	if depth >= #floors then return nil end
+	return depth + 1, floors[depth + 1]
+end
+
+-- Opens the next locked floor. Returns revealed routes when that owns the network.
+function Network.unlockNext(addr)
+	local net = Network.nets[addr]
+	if net == nil then return {} end
+	local index = Network.nextLock(addr)
+	if index == nil then return {} end
+	Network.state.depth[addr] = index
+	local floors = Network.floors(net)
+	emit("network.floor", { addr = addr, floor = index, kind = floors[index].kind, org = net.org })
+	if Network.depth(addr) >= #floors then
+		return Network.markOwned(addr)
+	end
+	return {}
+end
+
+function Network.isFloorOpen(addr, index)
+	return index <= Network.depth(addr)
+end
+
+---------------------------------------------------------------------------
+-- Filesystem (generated, deterministic per save): one folder per floor
 ---------------------------------------------------------------------------
 
 local function newDir() return { dir = true, children = {} } end
@@ -170,54 +307,94 @@ local function buildFs(net)
 	local org = Lore.getOrg(net.org)
 	local rng = Rng.new(Network.state.seed or 0, "fs", net.addr)
 	local root = newDir()
+	local floors = Network.floors(net)
 
-	if net.kind == "site" and net.site then
-		addFile(root, "index.page", { text = net.site.text or net.name })
-		return root
-	end
-
-	-- users
 	local users = {}
 	for _, u in ipairs(org.users) do
 		if rng:chance(0.7) or #users == 0 then table.insert(users, u) end
 	end
-	addFile(root, "etc/users", { text = table.concat(users, "\n") })
 
-	-- access log
-	local lines = {}
-	for i = 1, rng:int(4, 9) do
-		local line = rng:pick(Lore.logLines):format(rng:pick(users))
-		table.insert(lines, string.format("[%02d:%02d] %s", rng:int(0, 23), rng:int(0, 59), line))
-	end
-	addFile(root, "logs/access.log", { text = table.concat(lines, "\n") })
-
-	-- mail
-	local mails = Lore.mail[org.tone] or Lore.mail.device
-	for i = 1, rng:int(1, 3) do
-		local body = rng:pick(mails):format(org.name)
-		local from, to = rng:pick(users), rng:pick(users)
-		addFile(root, string.format("home/%s/mail/%03d.msg", to, rng:int(1, 999)),
-			{ text = "From: " .. from .. "\nTo: " .. to .. "\n\n" .. body })
-	end
-
-	-- paydata
-	if org.paydata[2] > 0 then
-		for i = 1, rng:int(1, 2) do
-			local value = rng:int(org.paydata[1], org.paydata[2]) * net.tier
-			addFile(root, string.format("data/paydata_%04x.dat", rng:int(0, 65535)),
-				{ text = "[encrypted corporate data]", paydata = value })
+	-- password hints go into the files floor just before each gate, if there is one
+	local hints = {}
+	for i, f in ipairs(floors) do
+		if f.kind == "password" then
+			for j = i - 1, 2, -1 do
+				if floors[j].kind == "files" then
+					hints[j] = hints[j] or {}
+					table.insert(hints[j], { floor = i, code = f.password })
+					break
+				end
+			end
 		end
 	end
 
-	-- device networks: device file describes the real device
-	if net.kind == "device" and net.device then
-		addFile(root, "device/info", { text = "Device: " .. (net.device.label or "unknown") ..
-			"\nControl: run 'device' while connected to this network." })
-	end
+	local paydataPlaced = false
+	for i, f in ipairs(floors) do
+		local dir = Network.floorFolder(i, f)
 
-	-- extra files from other mods
-	if type(net.extraFiles) == "table" then
-		for path, file in pairs(net.extraFiles) do addFile(root, path, file) end
+		if f.kind == "lobby" then
+			if net.kind == "site" and net.site then
+				addFile(root, dir .. "/index.page", { text = net.site.text or net.name })
+			else
+				addFile(root, dir .. "/welcome.txt", { text = net.name .. "\nOperator: " .. org.name ..
+					"\nAddress: " .. net.addr .. "\nArchitecture: " .. #floors .. " floors" ..
+					"\n\nUnauthorised access is a violation of NetWatch regulations." })
+			end
+			if net.kind == "device" and net.device then
+				addFile(root, dir .. "/device.txt", { text = "Device: " .. (net.device.label or "unknown") })
+			end
+
+		elseif f.kind == "ice" or f.kind == "black" then
+			addFile(root, dir .. "/ice.daemon", { text = (f.kind == "black" and "BLACK ICE. Lethal countermeasures active." or
+				"ICE program, rating " .. f.ice .. ".") .. "\nStatus: broken." })
+
+		elseif f.kind == "password" then
+			addFile(root, dir .. "/gate.txt", { text = "Password gate. Status: open." })
+
+		elseif f.kind == "files" then
+			addFile(root, dir .. "/etc/users", { text = table.concat(users, "\n") })
+			local lines = {}
+			for _ = 1, rng:int(4, 9) do
+				local line = rng:pick(Lore.logLines):format(rng:pick(users))
+				table.insert(lines, string.format("[%02d:%02d] %s", rng:int(0, 23), rng:int(0, 59), line))
+			end
+			addFile(root, dir .. "/logs/access.log", { text = table.concat(lines, "\n") })
+			local mails = Lore.mail[org.tone] or Lore.mail.device
+			for _ = 1, rng:int(1, 3) do
+				local from, to = rng:pick(users), rng:pick(users)
+				addFile(root, string.format("%s/home/%s/mail/%03d.msg", dir, to, rng:int(1, 999)),
+					{ text = "From: " .. from .. "\nTo: " .. to .. "\n\n" .. rng:pick(mails):format(org.name) })
+			end
+			for _, hint in ipairs(hints[i] or {}) do
+				local who = rng:pick(users)
+				addFile(root, string.format("%s/home/%s/mail/%03d.msg", dir, who, rng:int(1, 999)),
+					{ text = "From: secops\nTo: " .. who .. "\n\nTemporary access code for floor " .. hint.floor ..
+						": " .. hint.code .. "\nDelete this message after reading." })
+			end
+			if org.paydata[2] > 0 and (not paydataPlaced or rng:chance(0.5)) then
+				local value = rng:int(org.paydata[1], org.paydata[2]) * net.tier
+				addFile(root, string.format("%s/data/paydata_%04x.dat", dir, rng:int(0, 65535)),
+					{ text = "[encrypted corporate data]", paydata = value })
+				paydataPlaced = true
+			end
+
+		elseif f.kind == "control" then
+			local lines = {}
+			for n, d in ipairs(net.devices or {}) do table.insert(lines, n .. ". " .. d.label) end
+			if net.device then table.insert(lines, "1. " .. (net.device.label or "Device")) end
+			addFile(root, dir .. "/devices.txt", { text = #lines > 0 and table.concat(lines, "\n") or "No devices online." })
+
+		elseif f.kind == "core" then
+			addFile(root, dir .. "/root.key", { text = "ROOT ACCESS GRANTED." })
+			if org.paydata[2] > 0 then
+				local value = rng:int(org.paydata[1], org.paydata[2]) * net.tier * 2
+				addFile(root, string.format("%s/vault/paydata_%04x.dat", dir, rng:int(0, 65535)),
+					{ text = "[encrypted core data]", paydata = value })
+			end
+			if type(net.extraFiles) == "table" then
+				for path, file in pairs(net.extraFiles) do addFile(root, dir .. "/" .. path, file) end
+			end
+		end
 	end
 
 	return root
@@ -226,6 +403,16 @@ end
 function Network.fs(net)
 	if net.fs == nil then net.fs = buildFs(net) end
 	return net.fs
+end
+
+-- Which floor a path is on (1 for the root itself).
+function Network.floorOfPath(net, path)
+	local first = tostring(path):match("^/?(%d%d)_")
+	return first and tonumber(first) or 1
+end
+
+function Network.canAccess(net, path)
+	return Network.isFloorOpen(net.addr, Network.floorOfPath(net, path))
 end
 
 -- Resolves a path ("/a/b", "b", "..") against cwd; returns node, normalisedPath.

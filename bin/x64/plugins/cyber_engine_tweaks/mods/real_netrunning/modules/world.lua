@@ -102,6 +102,64 @@ function World.lookAtDevice()
 	return result
 end
 
+---------------------------------------------------------------------------
+-- Access points and the devices wired to them
+---------------------------------------------------------------------------
+
+-- Device controller classes, most specific first.
+local psKinds = {
+	{ class = "AccessPointControllerPS",        kind = "access",   label = "Access point" },
+	{ class = "SurveillanceCameraControllerPS", kind = "camera",   label = "Camera" },
+	{ class = "SecurityTurretControllerPS",     kind = "turret",   label = "Turret" },
+	{ class = "DoorControllerPS",               kind = "door",     label = "Door" },
+	{ class = "ComputerControllerPS",           kind = "computer", label = "Computer" },
+	{ class = "TerminalControllerPS",           kind = "terminal", label = "Terminal" },
+}
+
+-- Turns a device controller (PS) into the same shape lookAtDevice returns.
+local function describePS(ps)
+	local id = PersistentID.ExtractEntityID(ps:GetID())
+	local info = { id = id, hash = tostring(id.hash), kind = "device", label = "Device", ice = 1 }
+	for _, k in ipairs(psKinds) do
+		if ps:IsA(k.class) then
+			info.kind, info.label = k.kind, k.label
+			break
+		end
+	end
+	local ok, name = pcall(function() return ps:GetDeviceName() end)
+	if ok and type(name) == "string" and name ~= "" and not name:find("^LocKey") then
+		info.label = info.label .. " - " .. name
+	end
+	return info
+end
+
+-- The access point a device is wired to (or the device itself if it is one), or nil.
+function World.accessPointFor(device)
+	if device.kind == "access" then return device end
+	local found = try(function()
+		local parents = Game.GetDeviceSystem():GetParents(device.id)
+		for _, ps in ipairs(parents or {}) do
+			if ps:IsA("AccessPointControllerPS") then return describePS(ps) end
+		end
+		return false
+	end)
+	return found or nil
+end
+
+-- Every device wired to an access point.
+function World.devicesOn(accessPoint)
+	local list = try(function()
+		local out = {}
+		local children = Game.GetDeviceSystem():GetChildren(accessPoint.id)
+		for _, ps in ipairs(children or {}) do
+			local info = describePS(ps)
+			if info.kind ~= "access" then table.insert(out, info) end
+		end
+		return out
+	end)
+	return list or {}
+end
+
 local function entityFor(device)
 	local entity = try(function() return Game.FindEntityByID(device.id) end)
 	if entity == nil then return nil, "The device is out of range." end

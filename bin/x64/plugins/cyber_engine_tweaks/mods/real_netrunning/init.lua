@@ -103,6 +103,7 @@ registerForEvent("onInit", function()
 
 	Bus.on("*", newsFromEvents)
 	Bus.on("network.breached", Native.onBreached)
+	Bus.on("network.floor", Native.onBreached)
 	Market.attach(Bus)
 
 	-- Mod reloaded while already in game

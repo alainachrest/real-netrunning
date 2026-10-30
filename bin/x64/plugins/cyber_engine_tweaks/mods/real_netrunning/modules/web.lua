@@ -210,7 +210,9 @@ local function fileRows(p, net, node, path)
 	for _, name in ipairs(names) do
 		local child = node.children[name]
 		local full = path .. "/" .. name
-		if child.dir then
+		if path == "" and not Network.canAccess(net, full) then
+			-- locked floor: skip
+		elseif child.dir then
 			fileRows(p, net, child, full)
 		else
 			local sold = Network.state.looted[net.addr .. ":" .. full]
@@ -270,12 +272,21 @@ local function netPage(addr)
 	end
 
 	p:divider()
-	if Network.isOwned(addr) then
-		p:heading("Internal files", GREEN)
+	p:heading("Architecture")
+	local depth = Network.depth(addr)
+	for i, f in ipairs(Network.floors(net)) do
+		local open = i <= depth
+		local lock = f.kind == "ice" and ("ICE " .. f.ice) or f.kind == "black" and ("BLACK ICE " .. f.ice)
+			or f.kind == "password" and "PASSWORD" or (f.kind == "core" and f.ice > 0) and ("ICE " .. f.ice) or ""
+		p:row({ "FLOOR " .. i, f.kind:upper(), open and "OPEN" or lock }, "", open and GREEN or (f.kind == "black" and RED or YELLOW))
+	end
+	if depth > 1 then
+		p:heading(Network.isOwned(addr) and "Internal files" or "Files on open floors", GREEN)
 		fileRows(p, net, Network.fs(net), "")
 		p:text("Use the Terminal to download or leak paydata.", YELLOW)
-	else
-		p:notice("Internal systems protected by ICE level " .. net.ice .. ". Breach from the Terminal:  connect " .. addr .. "  then  breach", RED)
+	end
+	if not Network.isOwned(addr) then
+		p:notice("Work down the floors from the Terminal:  connect " .. addr .. "  then  map  and  breach", RED)
 	end
 	return p
 end
