@@ -2,8 +2,9 @@
 Real Netrunning
 Grey Hack-style netrunning for Cyberpunk 2077, built from Night City's own lore.
 
-Open the CET overlay to use the cyberdeck (CET only gives ImGui input while the
-overlay is open). Type 'help' in the deck.
+Press the "Open cyberdeck" hotkey (set it in CET's Hotkeys tab) to open the deck in
+the game's own UI. That needs Codeware 1.21+ and the r6/scripts/RealNetrunning files.
+The deck is also in the CET overlay as a fallback. Type 'help' in the deck.
 
 Other mods: local rn = GetMod("real_netrunning") -- see rn.api below.
 ]]
@@ -17,6 +18,7 @@ local World = require("modules/world")
 local Shell = require("modules/shell")
 local Terminal = require("modules/terminal")
 local Bridge = require("modules/cyberscript")
+local Native = require("modules/native")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -35,6 +37,7 @@ local Persisted = Network.newState()
 Bus.log = log
 World.log = log
 Bridge.log = log
+Native.log = log
 Network.bus = Bus
 Shell.bus = Bus
 Bridge.bus = Bus
@@ -91,6 +94,7 @@ registerForEvent("onInit", function()
 	GameSession.OnStart(startWorld)
 	GameSession.OnEnd(function()
 		RealNetrunning.ready = false
+		Native.close()
 		Shell.reset()
 	end)
 
@@ -106,6 +110,7 @@ end)
 registerForEvent("onUpdate", function(dt)
 	Bridge.update(dt)
 	if RealNetrunning.ready then
+		Native.update(dt)
 		Shell.update(dt)
 	end
 end)
@@ -119,7 +124,18 @@ registerForEvent("onDraw", function()
 	end
 end)
 
-registerHotkey("rn_toggle_deck", "Show or hide the cyberdeck", function()
+registerHotkey("rn_open_deck", "Open cyberdeck", function()
+	if not RealNetrunning.ready then return end
+	if Native.isOpen() then
+		Native.close()
+	elseif not Native.open() then
+		-- no native deck available: fall back to the CET overlay window
+		Terminal.visible = true
+		World.notify("Open the CET overlay to use the cyberdeck")
+	end
+end)
+
+registerHotkey("rn_toggle_overlay_deck", "Show or hide the overlay cyberdeck", function()
 	Terminal.visible = not Terminal.visible
 end)
 
@@ -142,6 +158,7 @@ RealNetrunning.api = {
 	-- def = { addr, name, org, tier, ice, reveals, known, files = { ["path"] = { text, paydata } } }
 	registerNetwork = function(def) return Network.registerExternal(def) ~= nil end,
 	run = function(command) Shell.run(command) end,
+	openDeck = function() return Native.open() end,
 }
 
 return RealNetrunning

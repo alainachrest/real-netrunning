@@ -8,15 +8,19 @@ Version 0.1.0 — first playable build.
 
 - Cyberpunk 2077 2.5
 - Cyber Engine Tweaks 1.38 or newer
+- redscript and Codeware 1.21 or newer, for the in-game deck
 - Optional: CyberScript with the extension API (`api-hooks-and-2.5` branch), for the CyberScript bridge https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5
 
 ## Install
 
-Copy the `bin` folder into your Cyberpunk 2077 folder.
+Copy the `bin` and `r6` folders into your Cyberpunk 2077 folder.
 
 ## Playing
 
-Open the CET overlay to use the cyberdeck. CET only gives windows mouse and keyboard input while the overlay is open. A hotkey to show or hide the deck is in CET's Hotkeys tab.
+Bind **Open cyberdeck** in CET's Hotkeys tab, then press it in game. The deck opens in the game's own UI: time slows, V's controls pause, and you type straight into it. Press the hotkey again or Esc to close it.
+
+- Enter runs a command, Up and Down step through past commands, Page Up and Page Down scroll the output.
+- If the native deck can't load (no Codeware, or the `r6` folder is missing), the hotkey falls back to the deck in the CET overlay.
 
 | Command | What it does |
 | --- | --- |

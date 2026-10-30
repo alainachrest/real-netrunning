@@ -14,6 +14,8 @@ local Shell = {
 	job = nil,         -- running breach { addr, elapsed, duration, traceTotal, traced }
 	bus = nil,
 	heatDecayTimer = 0,
+	onLine = nil,      -- function(text, kind) called for every new line (native deck)
+	onClear = nil,     -- function() called when the screen is cleared
 }
 
 local commands = {}
@@ -22,6 +24,7 @@ local helpOrder = {}
 local function out(text, kind)
 	for line in (tostring(text) .. "\n"):gmatch("(.-)\n") do
 		table.insert(Shell.lines, { text = line, kind = kind or "out" })
+		if Shell.onLine then pcall(Shell.onLine, line, kind or "out") end
 	end
 	while #Shell.lines > Shell.maxLines do table.remove(Shell.lines, 1) end
 end
@@ -75,7 +78,10 @@ def("help", "help", "List commands.", function()
 	end
 end)
 
-def("clear", "clear", "Clear the screen.", function() Shell.lines = {} end)
+def("clear", "clear", "Clear the screen.", function()
+	Shell.lines = {}
+	if Shell.onClear then pcall(Shell.onClear) end
+end)
 
 def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
 	out("Deck power: " .. World.deckPower() .. "   NetWatch heat: " .. Network.state.heat .. "/100")
