@@ -222,6 +222,21 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         visual.localTransform = place;
         visual.isEnabled = true;
         template.AddComponent(visual);
+
+        // Wall meshes are only drawn from one side, so walls get a second copy
+        // turned round (180 degrees about the vertical), back to back.
+        if kind == 1 {
+            let back = new MeshComponent();
+            back.mesh *= path;
+            back.meshAppearance = n"default";
+            back.visualScale = Vector3(sx, sy, sz);
+            let backPlace: WorldTransform;
+            WorldTransform.SetPosition(backPlace, Vector4(cx * sx, cy * sy, offsetZ - cz * sz, 1.0));
+            WorldTransform.SetOrientation(backPlace, Quaternion(0.0, 0.0, 1.0, 0.0));
+            back.localTransform = backPlace;
+            back.isEnabled = true;
+            template.AddComponent(back);
+        }
     }
 
     public func CollidersAdded() -> Int32 {
