@@ -259,6 +259,24 @@ local function buildFloor(net, i, f, count)
 		end
 	end
 
+	-- dark pillars where walls meet (wall meshes leave gaps at the corners) and a
+	-- dark shell round the outside of the whole floor, so nothing shows through
+	local halfW, halfH = L.w * r / 2, L.h * r / 2
+	local hz = Kit.wallHeight / 2
+	for a = 0, L.w do
+		for b = 0, L.h do
+			block(floor, { x = cx - halfW + a * r, y = cy - halfH + b * r, z = cz + hz, yaw = 0,
+				hx = 0.45, hy = 0.45, hz = hz, kind = 3 })
+		end
+	end
+	local shell = 0.3   -- half thickness
+	local gap = Kit.wallThickness / 2 + shell + 0.05
+	local tall = hz + 1.0
+	block(floor, { x = cx, y = cy - halfH - gap, z = cz + hz, yaw = 0, hx = halfW + 1.2, hy = shell, hz = tall, kind = 3 })
+	block(floor, { x = cx, y = cy + halfH + gap, z = cz + hz, yaw = 0, hx = halfW + 1.2, hy = shell, hz = tall, kind = 3 })
+	block(floor, { x = cx - halfW - gap, y = cy, z = cz + hz, yaw = 0, hx = shell, hy = halfH + 1.2, hz = tall, kind = 3 })
+	block(floor, { x = cx + halfW + gap, y = cy, z = cz + hz, yaw = 0, hx = shell, hy = halfH + 1.2, hz = tall, kind = 3 })
+
 	-- arriving, leaving
 	local sx, sy = cellCentre(i, L, L.start[1], L.start[2])
 	floor.arrival = { x = sx, y = sy - 3, z = cz }

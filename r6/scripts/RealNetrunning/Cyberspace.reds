@@ -146,6 +146,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // kind 0: floor slab (its mesh's top is the top of the box)
     // kind 1: wall or door barrier (its mesh fills the box)
     // kind 2: ceiling (the floor mesh upside down, its face on the underside of the box)
+    // kind 3: solid dark block (the outer shell of a floor, corner pillars)
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
         let rotation: EulerAngles;
@@ -213,6 +214,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         collider.isEnabled = true;
         template.AddComponent(collider);
         this.m_collidersAdded += 1;
+
+        if kind == 3 {
+            this.FitMesh(template, this.m_backFit, RNBackingMesh(), 0.0, 0.0, 0.0, size.X, size.Y, size.Z);
+            return;
+        }
 
         // What V sees: the chosen mesh, stretched to the box.
         let fit = kind == 1 ? this.m_wallFit : this.m_floorFit;
@@ -389,9 +395,9 @@ public func RNFloorMesh(i: Int32) -> ResRef {
     return r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
 }
 
-// A plain solid box from the game's level design kit, for backing.
+// A plain dark box from the game's level design kit, for backing and shells.
 public func RNBackingMesh() -> ResRef {
-    return r"base\\environment\\ld_kit\\box_1_1_1_snappoints.mesh";
+    return r"base\\environment\\ld_kit\\box_1_1_1_snappoints_dark.mesh";
 }
 
 public func RNWallStyleCount() -> Int32 { return 6; }
