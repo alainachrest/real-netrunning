@@ -12,8 +12,11 @@ Kit.origin = { x = -1085.0, y = 880.0, z = 9000.0 }
 
 -- Each floor of a network is a square platform; floors are stacked downwards.
 Kit.floorGap = 18.0      -- metres between floors
-Kit.tileSize = 8.0       -- matches the collider in Cyberspace.reds
-Kit.tilesPerSide = 3     -- 3 x 3 tiles = 24 x 24 m platform
+Kit.tileSize = 24.0      -- one 24 x 24 m platform per floor (RNFloorHalf in Cyberspace.reds)
+Kit.tilesPerSide = 1
+Kit.defaultStyle = 2     -- Mikoshi prison platform
+-- the big scenery (point clouds, particles) stands well away from the platforms
+Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
 Kit.useRadius = 2.6      -- how close V must be to use an object
 Kit.fallLimit = 25.0     -- falling this far below a floor puts V back on it
 

@@ -158,7 +158,6 @@ local function buildFloor(net, i, f, count)
 			if id ~= nil then table.insert(floor.tiles, id) end
 		end
 	end
-	prop(floor.props, f.kind == "core" and Kit.templates.floorCore or Kit.templates.floor, cx, cy, cz, 0)
 
 	if i > 1 then
 		local x, y = Cyber.arrivalPoint(i)
@@ -166,7 +165,6 @@ local function buildFloor(net, i, f, count)
 	end
 	if i < count then
 		local x, y = descentPoint(i)
-		prop(floor.props, Kit.templates.descent, x, y, cz, 0)
 		addObject(i, "down", x, y, cz, "Down to floor " .. (i + 1))
 	end
 	if i == 1 then
@@ -229,12 +227,13 @@ local function build()
 	local floors = Network.floors(net)
 	Cyber.floors, Cyber.objects, Cyber.props = {}, {}, {}
 	local x, y, z = centre(1)
-	prop(Cyber.props, Kit.ambience(org, net.tier), x, y, z + 6, 0)
-	prop(Cyber.props, Kit.templates.particles, x, y, z - Kit.floorGap * (#floors - 1) / 2, 0)
-	prop(Cyber.props, Kit.templates.blocks, x + 30, y + 30, z - Kit.floorGap, 45)
+	local o = Kit.sceneryOffset
+	prop(Cyber.props, Kit.ambience(org, net.tier), x + o.x, y + o.y, z + o.z, 0)
+	prop(Cyber.props, Kit.templates.particles, x - o.y, y, z + o.z, 0)
+	prop(Cyber.props, Kit.templates.blocks, x + o.y, y - o.y / 2, z + o.z, 45)
 	for _, f in ipairs(floors) do
 		if f.kind == "black" then
-			prop(Cyber.props, Kit.templates.blackwall, x, y + 60, z - Kit.floorGap * #floors / 2, 180)
+			prop(Cyber.props, Kit.templates.blackwall, x, y + o.y * 1.5, z - Kit.floorGap * #floors / 2, 180)
 			break
 		end
 	end
@@ -372,7 +371,7 @@ end
 
 function Cyber.applyLook()
 	local s = state()
-	World.cyberCall("SetFloorStyle", s.style or 0)
+	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
 	World.cyberCall("SetFloorScale", s.scale or 1.0)
 	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
 end
@@ -411,13 +410,13 @@ function Cyber.style(n)
 	if count == 0 then return false, "Cyberspace styles need the r6 scripts." end
 	if n == nil then
 		return true, "Floor styles ('cyber style <number>'):\n" ..
-			listChoices(count, function(i) return World.cyberCall("FloorStyleName", i) end, s.style or 0)
+			listChoices(count, function(i) return World.cyberCall("FloorStyleName", i) end, s.style or Kit.defaultStyle)
 	end
 	n = math.floor(tonumber(n) or -1)
 	if n < 0 or n >= count then return false, "Pick a style from 0 to " .. (count - 1) .. "." end
 	s.style = n
 	World.cyberCall("SetFloorStyle", n)
-	if Cyber.active then respawnTiles() end
+	if Cyber.active then Cyber.restyleTimer = 4.0 end
 	return true, "Floor style: " .. tostring(World.cyberCall("FloorStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
 end
 
@@ -652,6 +651,15 @@ function Cyber.update(dt)
 	end
 	if not Cyber.active then return end
 
+	if Cyber.phase == "preparing" then
+		Cyber.prepareTimer = Cyber.prepareTimer - dt
+		if World.cyberCall("FloorReady") == true or Cyber.prepareTimer <= 0 then
+			build()
+			Cyber.phase, Cyber.enterTimer = "entering", 1.5
+		end
+		return
+	end
+
 	if Cyber.phase == "entering" then
 		Cyber.enterTimer = Cyber.enterTimer - dt
 		if Cyber.enterTimer <= 0 then
@@ -734,6 +742,14 @@ function Cyber.update(dt)
 		end
 	end
 
+	if Cyber.restyleTimer then
+		Cyber.restyleTimer = Cyber.restyleTimer - dt
+		if World.cyberCall("FloorReady") == true or Cyber.restyleTimer <= 0 then
+			Cyber.restyleTimer = nil
+			respawnTiles()
+		end
+	end
+
 	if Cyber.retireTimer then
 		Cyber.retireTimer = Cyber.retireTimer - dt
 		if Cyber.retireTimer <= 0 then
@@ -780,7 +796,8 @@ function Cyber.debug()
 	table.insert(lines, "floor tiles: asked " .. (Cyber.tilesAsked or 0) .. ", got IDs " .. tiles .. ", spawned " .. spawned ..
 		", entities " .. withEntity .. ", with collider " .. withCollider)
 	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
-	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()))
+	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
+		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")))
 	local failed = {}
 	for name in pairs(Cyber.failedProps or {}) do table.insert(failed, name) end
 	if #failed > 0 then table.insert(lines, "props that didn't spawn: " .. table.concat(failed, ", ")) end
