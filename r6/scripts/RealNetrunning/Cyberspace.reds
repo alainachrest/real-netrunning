@@ -62,6 +62,21 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         collider.isEnabled = true;
         template.AddComponent(collider);
         this.m_collidersAdded += 1;
+
+        // What V sees: a Mikoshi platform piece from Arasaka Tower, stretched to
+        // the tile. The mesh is 4.44 x 4.69 m and 0.2 m thick, centred at
+        // (-0.12, 0, -0.10), so scale it to 8 x 8 m and lift its top to the
+        // top of the collider.
+        let floor = new MeshComponent();
+        floor.mesh *= r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
+        floor.meshAppearance = n"default";
+        floor.visualScale = Vector3(1.8, 1.707, 1.0);
+        let place: WorldTransform;
+        WorldTransform.SetPosition(place, Vector4(0.219, 0.0, 0.495, 1.0));
+        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        floor.localTransform = place;
+        floor.isEnabled = true;
+        template.AddComponent(floor);
     }
 
     public func CollidersAdded() -> Int32 {

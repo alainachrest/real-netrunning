@@ -471,6 +471,13 @@ local function updateIce(dt)
 		if dead == false then
 			alive = alive + 1
 			if not floor.iceHostile[k] then floor.iceHostile[k] = World.makeHostile(id) end
+			-- ICE fights with quickhacks, like V: no guns. Checked a few times in
+			-- case the game hands the weapon back while it spawns in.
+			floor.iceDisarmed = floor.iceDisarmed or {}
+			if (floor.iceDisarmed[k] or 0) < 6 then
+				World.disarm(id)
+				floor.iceDisarmed[k] = (floor.iceDisarmed[k] or 0) + 1
+			end
 		elseif dead == nil then
 			alive = alive + 1 -- still spawning
 		end
@@ -484,7 +491,7 @@ local function updateIce(dt)
 	-- every program on this floor is down: the floor below opens
 	local index = Network.nextLock(Cyber.addr)
 	for _, id in ipairs(floor.ice) do table.insert(floor.corpses, id) end
-	floor.ice, floor.iceHostile, floor.iceCleared = {}, {}, true
+	floor.ice, floor.iceHostile, floor.iceDisarmed, floor.iceCleared = {}, {}, {}, true
 	if index == Cyber.floor + 1 then
 		local revealed = Network.unlockNext(Cyber.addr)
 		local net = Network.get(Cyber.addr)
@@ -504,12 +511,16 @@ local function updateAgent()
 			local pos = World.playerTransform()
 			if pos then
 				Cyber.agentNPC = World.spawnNPC(Kit.netwatch, pos.x + 4, pos.y + 4, pos.z + 0.2, 225)
-				Cyber.agentHostile = false
+				Cyber.agentHostile, Cyber.agentDisarmed = false, 0
 				say(agent.name .. " steps out of the data stream. Take it down.", "err")
 			end
 		else
 			local dead = World.npcDead(Cyber.agentNPC)
 			if dead == false and not Cyber.agentHostile then Cyber.agentHostile = World.makeHostile(Cyber.agentNPC) end
+			if dead == false and (Cyber.agentDisarmed or 0) < 6 then
+				World.disarm(Cyber.agentNPC)
+				Cyber.agentDisarmed = (Cyber.agentDisarmed or 0) + 1
+			end
 			if dead == true then
 				Cyber.agentNPC = nil
 				local _, message = NetWatch.win()

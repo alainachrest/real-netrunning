@@ -200,6 +200,26 @@ function World.makeHostile(id)
 	end) == true
 end
 
+-- Takes every weapon off a spawned NPC, so it fights with quickhacks only.
+-- Returns how many weapons were removed (0 once it's unarmed), or nil if it isn't there yet.
+function World.disarm(id)
+	return try(function()
+		local npc = Game.FindEntityByID(id)
+		if npc == nil then return nil end
+		local ts = Game.GetTransactionSystem()
+		local ok, items = ts:GetItemList(npc)
+		if not ok or items == nil then return nil end
+		local removed = 0
+		for _, data in ipairs(items) do
+			if data:HasTag("Weapon") then
+				ts:RemoveItem(npc, data:GetID(), data:GetQuantity())
+				removed = removed + 1
+			end
+		end
+		return removed
+	end)
+end
+
 -- V's health in percent (0-100).
 function World.healthPercent()
 	local value = try(function()
