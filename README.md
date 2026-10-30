@@ -22,6 +22,16 @@ Bind **Open cyberdeck** in CET's Hotkeys tab, then press it in game. The deck op
 - Enter runs a command, Up and Down step through past commands, Page Up and Page Down scroll the output.
 - If the native deck can't load (no Codeware, or the `r6` folder is missing), the hotkey falls back to the deck in the CET overlay.
 
+### Computer desktops
+
+Every in-game computer gets a **DESKTOP** button in the bottom-right of its screen. It switches into a simulated OS over the normal screen (which stays as it was underneath):
+
+- **Files**: the computer's own mail and documents in folders, plus a `System` folder of files generated for that machine. Encrypted documents and system files stay locked until you breach the computer.
+- **Terminal**: the cyberdeck shell, already connected to that computer. Type `breach` to unlock its files.
+- **Cyberdeck**: opens the full deck popup connected to that computer.
+
+If typing doesn't reach the Terminal window on a computer screen, use **Cyberdeck** instead.
+
 | Command | What it does |
 | --- | --- |
 | `help` | List commands |

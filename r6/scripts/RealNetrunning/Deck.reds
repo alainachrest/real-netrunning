@@ -17,6 +17,14 @@
 module RealNetrunning
 import Codeware.UI.*
 
+// One file Lua generated for a computer's simulated filesystem.
+public class RNFileEntry {
+    public let key: String;
+    public let path: String;
+    public let text: String;
+    public let locked: Bool;
+}
+
 public class DeckService extends ScriptableService {
     private let m_lines: array<String>;
     private let m_kinds: array<Int32>;
@@ -26,6 +34,14 @@ public class DeckService extends ScriptableService {
     private let m_status: String;
     private let m_trace: Float;
     private let m_popup: ref<DeckPopup>;
+
+    // computer desktops (see Desktop.reds)
+    private let m_machineRequests: array<String>;
+    private let m_files: array<ref<RNFileEntry>>;
+    private let m_filesVersion: Int32;
+    private let m_terminals: array<wref<RNDesktop>>;
+    private let m_machineKeys: array<String>;
+    private let m_machineAddrs: array<String>;
 
     // Fixed limits, and defaults that don't rely on a start-up callback.
     private let m_traceSet: Bool;
@@ -138,6 +154,113 @@ public class DeckService extends ScriptableService {
         if IsDefined(this.m_popup) {
             this.m_popup.Refresh();
         }
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                terminal.OnDeckChanged();
+            }
+        }
+    }
+
+    // --- computer desktops ----------------------------------------------------
+
+    public static func Get() -> ref<DeckService> {
+        return GameInstance.GetScriptableServiceContainer()
+            .GetService(n"RealNetrunning.DeckService") as DeckService;
+    }
+
+    // Each desktop registers once when it is built; entries for computers that
+    // have since unloaded simply become undefined and are skipped.
+    public func RegisterTerminal(desktop: ref<RNDesktop>) {
+        let live: array<wref<RNDesktop>>;
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                ArrayPush(live, terminal);
+            }
+        }
+        ArrayPush(live, desktop);
+        this.m_terminals = live;
+    }
+
+    // A desktop asks Lua for a computer's generated files. Lua takes "key|name".
+    public func RequestMachine(key: String, name: String) {
+        ArrayPush(this.m_machineRequests, key + "|" + name);
+    }
+
+    public func HasMachineRequest() -> Bool {
+        return ArraySize(this.m_machineRequests) > 0;
+    }
+
+    public func TakeMachineRequest() -> String {
+        if ArraySize(this.m_machineRequests) == 0 {
+            return "";
+        }
+        let request = this.m_machineRequests[0];
+        ArrayErase(this.m_machineRequests, 0);
+        return request;
+    }
+
+    public func ClearMachineFiles(key: String) {
+        let kept: array<ref<RNFileEntry>>;
+        for entry in this.m_files {
+            if NotEquals(entry.key, key) {
+                ArrayPush(kept, entry);
+            }
+        }
+        this.m_files = kept;
+    }
+
+    public func AddMachineFile(key: String, path: String, text: String, locked: Bool) {
+        let entry = new RNFileEntry();
+        entry.key = key;
+        entry.path = path;
+        entry.text = text;
+        entry.locked = locked;
+        ArrayPush(this.m_files, entry);
+    }
+
+    // Lua calls this after adding a machine's files, so open desktops redraw.
+    public func MachineFilesReady(key: String) {
+        this.m_filesVersion += 1;
+        for terminal in this.m_terminals {
+            if IsDefined(terminal) {
+                terminal.OnFilesChanged(key);
+            }
+        }
+    }
+
+    // Lua tells us which network address a computer was registered under.
+    public func SetMachineAddr(key: String, addr: String) {
+        let i = 0;
+        while i < ArraySize(this.m_machineKeys) {
+            if Equals(this.m_machineKeys[i], key) {
+                this.m_machineAddrs[i] = addr;
+                return;
+            }
+            i += 1;
+        }
+        ArrayPush(this.m_machineKeys, key);
+        ArrayPush(this.m_machineAddrs, addr);
+    }
+
+    public func GetMachineAddr(key: String) -> String {
+        let i = 0;
+        while i < ArraySize(this.m_machineKeys) {
+            if Equals(this.m_machineKeys[i], key) {
+                return this.m_machineAddrs[i];
+            }
+            i += 1;
+        }
+        return "";
+    }
+
+    public func GetMachineFiles(key: String) -> array<ref<RNFileEntry>> {
+        let result: array<ref<RNFileEntry>>;
+        for entry in this.m_files {
+            if Equals(entry.key, key) {
+                ArrayPush(result, entry);
+            }
+        }
+        return result;
     }
 
     // --- read by the popup --------------------------------------------------

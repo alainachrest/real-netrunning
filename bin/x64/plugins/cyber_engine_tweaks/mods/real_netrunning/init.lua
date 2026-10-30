@@ -62,6 +62,7 @@ local function startWorld()
 	Network.build()
 	Shell.reset()
 	Bridge.onWorldRebuilt()
+	Native.onWorldRebuilt()
 	RealNetrunning.ready = true
 	Shell.print("Cyberdeck online. Type 'help' to start, 'scan' to find networks.", "ok")
 end
@@ -99,6 +100,7 @@ registerForEvent("onInit", function()
 	end)
 
 	Bus.on("*", newsFromEvents)
+	Bus.on("network.breached", Native.onBreached)
 
 	-- Mod reloaded while already in game
 	if GameSession.IsLoaded() then startWorld() end
