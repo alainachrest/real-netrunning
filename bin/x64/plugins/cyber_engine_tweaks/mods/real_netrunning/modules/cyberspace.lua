@@ -83,11 +83,14 @@ end
 -- tends to be. The same for every visit to a network.
 function Cyber.layout(net, i, f)
 	local rng = Rng.new(Network.state.seed or 0, "rooms", net.addr, i)
-	local big = net.ice >= 4 or net.tier >= 2
-	local base = (f.kind == "files" or f.kind == "control") and 4 or 3
-	if big then base = base + 1 end
-	local w = math.min(5, base)
-	local h = math.min(5, base + rng:int(0, 1))
+	-- 4 x 4 at the smallest; files and control floors, bigger and corporate
+	-- networks are larger; off-world headquarters reach 8 x 8
+	local base = 4
+	if f.kind == "files" or f.kind == "control" then base = base + 1 end
+	if net.ice >= 4 or net.tier >= 2 then base = base + 1 end
+	if net.tier >= 3 then base = base + 2 end
+	local w = math.min(8, base + rng:int(0, 1))
+	local h = math.min(8, base + rng:int(0, 1))
 	local doors = {}
 	local function key(ax, ay, bx, by)
 		if ax > bx or (ax == bx and ay > by) then ax, ay, bx, by = bx, by, ax, ay end
@@ -428,18 +431,21 @@ local function unbuildFloor(i)
 	Cyber.floors[i] = nil
 end
 
--- Only the floor V is on and the ones directly above and below exist; the
+-- Only the floor V is on and the one below (where V is heading) exist; the
 -- rest are built and taken down as V moves, so big networks stay light.
+-- Returns true if floor i itself had to be built just now.
 function Cyber.ensureFloors(i)
 	local net = Network.get(Cyber.addr)
 	local floors = Network.floors(net)
 	for j in pairs(Cyber.floors) do
-		if math.abs(j - i) > 1 then unbuildFloor(j) end
+		if j < i or j > i + 1 then unbuildFloor(j) end
 	end
-	for j = math.max(1, i - 1), math.min(#floors, i + 1) do
+	local fresh = Cyber.floors[i] == nil
+	for j = i, math.min(#floors, i + 1) do
 		if Cyber.floors[j] == nil then buildFloor(net, j, floors[j], #floors) end
 	end
 	refreshGates()
+	return fresh
 end
 
 local function build()
@@ -473,8 +479,13 @@ end
 -- Jacking in and out
 ---------------------------------------------------------------------------
 
-local function moveToFloor(i, fromBelow)
-	Cyber.ensureFloors(i)
+local function moveToFloor(i, fromBelow, waited)
+	if not waited and Cyber.ensureFloors(i) then
+		-- the floor was just built (going back up): give it a moment to spawn
+		Cyber.pendingMove = { floor = i, fromBelow = fromBelow, timer = 1.0 }
+		World.notify("Climbing back up...")
+		return
+	end
 	local x, y, z
 	if fromBelow then
 		x, y, z = descentPoint(i)
@@ -505,7 +516,7 @@ function Cyber.jackIn()
 	if body == nil then return false, "Can't find your body. Load a save first." end
 
 	Cyber.active, Cyber.phase, Cyber.enterTimer = true, "entering", 1.5
-	Cyber.target, Cyber.arrived, Cyber.moveTimer, Cyber.toldToStepAway = nil, false, 0, false
+	Cyber.target, Cyber.arrived, Cyber.moveTimer, Cyber.toldToStepAway, Cyber.pendingMove = nil, false, 0, false, nil
 	Cyber.addr, Cyber.body, Cyber.floor = addr, body, 1
 	Cyber.bodySafe = addr:sub(1, 5) == "home."
 	Cyber.danger, Cyber.dangerTimer, Cyber.falls, Cyber.prompt = nil, 0, {}, nil
@@ -538,7 +549,7 @@ function Cyber.jackOut(reason, quiet)
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
 	end
 	local addr = Cyber.addr
-	Cyber.active, Cyber.phase, Cyber.addr, Cyber.body, Cyber.danger = false, nil, nil, nil, nil
+	Cyber.active, Cyber.phase, Cyber.addr, Cyber.body, Cyber.danger, Cyber.pendingMove = false, nil, nil, nil, nil, nil
 	local s = state()
 	s.active, s.body, s.addr = false, nil, nil
 	emit("cyber.jackout", { addr = addr, reason = reason or "user", forced = forced })
@@ -827,6 +838,16 @@ function Cyber.update(dt)
 		if Cyber.enterTimer <= 0 then
 			Cyber.phase = "moving"
 			moveToFloor(1, false)
+		end
+		return
+	end
+
+	if Cyber.pendingMove then
+		Cyber.pendingMove.timer = Cyber.pendingMove.timer - dt
+		if Cyber.pendingMove.timer <= 0 then
+			local move = Cyber.pendingMove
+			Cyber.pendingMove = nil
+			moveToFloor(move.floor, move.fromBelow, true)
 		end
 		return
 	end
