@@ -54,7 +54,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_style = 2;
         this.m_wallStyle = 3;
         this.m_lightLevel = 1.0;
-        this.m_lightColour = 0;
+        this.m_lightColour = 1;
         this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
         this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");
@@ -452,6 +452,7 @@ public func RNFloorMesh(i: Int32) -> ResRef {
 public func RNLightColourCount() -> Int32 { return 5; }
 
 public func RNLightColourName(i: Int32) -> String {
+    if i == 0 { return "Cyberspace cyan"; }
     if i == 1 { return "Netrunner blue"; }
     if i == 2 { return "Arasaka red"; }
     if i == 3 { return "Matrix green"; }

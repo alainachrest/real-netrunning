@@ -529,7 +529,7 @@ function Cyber.applyLook()
 	local s = state()
 	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
 	World.cyberCall("SetWallStyle", s.walls or Kit.defaultWalls)
-	World.cyberCall("SetLight", s.light or 1.0, s.lightColour or 0)
+	World.cyberCall("SetLight", s.light or 1.0, s.lightColour or Kit.defaultLightColour)
 	World.cyberCall("SetFloorScale", s.scale or Kit.defaultScale)
 	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
 end
@@ -599,7 +599,7 @@ function Cyber.light(level, colour)
 	if count == 0 then return false, "Cyberspace lighting needs the r6 scripts." end
 	if level == nil then
 		return true, "Brightness " .. (s.light or 1.0) .. ". 'cyber light <brightness> [colour]', brightness 1 is normal.\nColours:\n" ..
-			listChoices(count, function(i) return World.cyberCall("LightColourName", i) end, s.lightColour or 0)
+			listChoices(count, function(i) return World.cyberCall("LightColourName", i) end, s.lightColour or Kit.defaultLightColour)
 	end
 	level = tonumber(level)
 	if level == nil or level < 0 then return false, "Give a brightness of 0 or more, like 0.5 or 2." end
@@ -609,9 +609,9 @@ function Cyber.light(level, colour)
 		if colour < 0 or colour >= count then return false, "Pick a colour from 0 to " .. (count - 1) .. "." end
 		s.lightColour = colour
 	end
-	World.cyberCall("SetLight", s.light, s.lightColour or 0)
+	World.cyberCall("SetLight", s.light, s.lightColour or Kit.defaultLightColour)
 	if Cyber.active then Cyber.restyleTimer = 0.1 end
-	return true, "Lights: brightness " .. s.light .. ", " .. tostring(World.cyberCall("LightColourName", s.lightColour or 0)) ..
+	return true, "Lights: brightness " .. s.light .. ", " .. tostring(World.cyberCall("LightColourName", s.lightColour or Kit.defaultLightColour)) ..
 		(Cyber.active and "" or " (next time you jack in)")
 end
 

@@ -19,6 +19,7 @@ Kit.wallThickness = 0.5
 Kit.defaultStyle = 2     -- floor: Mikoshi prison platform
 Kit.defaultWalls = 3     -- walls: Mikoshi cyberspace wall
 Kit.defaultScale = 1.3   -- the prison platform looks right a little larger
+Kit.defaultLightColour = 1 -- netrunner blue
 -- the big scenery (point clouds, particles) stands well away from the platforms
 Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
 Kit.useRadius = 2.6      -- how close V must be to use an object
