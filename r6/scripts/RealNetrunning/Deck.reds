@@ -232,6 +232,10 @@ public class DeckPopup extends InGamePopup {
         text.SetFontFamily("base\\gameplay\\gui\\fonts\\raj\\raj.inkfontfamily");
         text.SetFontStyle(n"Medium");
         text.SetFontSize(size);
+        // without fit-to-content a text widget has zero size and draws nothing
+        text.SetFitToContent(true);
+        text.SetHAlign(inkEHorizontalAlign.Left);
+        text.SetVAlign(inkEVerticalAlign.Top);
         text.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
         text.BindProperty(n"tintColor", color);
         text.SetText("");
@@ -303,11 +307,12 @@ public class DeckPopup extends InGamePopup {
             return;
         }
 
-        this.m_status.SetText(this.m_service.GetStatus());
+        let status = this.m_service.GetStatus();
+        this.m_status.SetText(StrLen(status) > 0 ? status : " ");
 
         let trace = this.m_service.GetTrace();
         if trace < 0.0 {
-            this.m_trace.SetText("");
+            this.m_trace.SetText(" ");
         } else {
             this.m_trace.SetText("TRACE " + IntToString(Cast<Int32>(trace)) + "%");
         }
@@ -328,7 +333,7 @@ public class DeckPopup extends InGamePopup {
                 row.SetText(this.m_service.GetLine(index));
                 row.BindProperty(n"tintColor", this.ColorFor(this.m_service.GetKind(index)));
             } else {
-                row.SetText("");
+                row.SetText(" ");
             }
             i += 1;
         }
