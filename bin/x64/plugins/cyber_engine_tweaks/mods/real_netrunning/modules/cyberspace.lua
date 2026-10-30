@@ -126,6 +126,7 @@ local function addObject(i, kind, x, y, z, label, extra)
 end
 
 local function prop(list, path, x, y, z, yaw)
+	Cyber.propsAsked = (Cyber.propsAsked or 0) + 1
 	local id = World.spawnProp(path, x, y, z, yaw or 0)
 	if id ~= nil then table.insert(list, id) end
 	return id
@@ -148,6 +149,7 @@ local function buildFloor(net, i, f, count)
 	local half = math.floor(Kit.tilesPerSide / 2)
 	for a = -half, half do
 		for b = -half, half do
+			Cyber.tilesAsked = (Cyber.tilesAsked or 0) + 1
 			local id = World.spawnTile(cx + a * Kit.tileSize, cy + b * Kit.tileSize, cz - 0.5)
 			if id ~= nil then table.insert(floor.tiles, id) end
 		end
@@ -294,6 +296,7 @@ function Cyber.jackIn()
 	for _, effect in ipairs(Kit.restrictions) do World.applyStatusEffect(effect) end
 	World.setJackedIn(true)
 	Cyber.closeDeck()
+	Cyber.tilesAsked, Cyber.propsAsked, World.lastError = 0, 0, nil
 	build()
 	emit("cyber.jackin", { addr = addr })
 	return true, "Jacking in to " .. net.name .. "..."
@@ -302,6 +305,8 @@ end
 -- reason: "user", "trace", "health", "body", "disconnected", "broken"
 function Cyber.jackOut(reason, quiet)
 	if not Cyber.active then return false, "You're not in cyberspace." end
+	Cyber.lastReason = reason or "user"
+	Cyber.lastDebug = Cyber.debug()
 	clear()
 	local body = Cyber.body
 	if body then World.teleport(body.x, body.y, body.z + 0.1, body.yaw) end
@@ -312,8 +317,6 @@ function Cyber.jackOut(reason, quiet)
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
 	end
 	local addr = Cyber.addr
-	Cyber.lastReason = reason or "user"
-	Cyber.lastDebug = Cyber.debug()
 	Cyber.active, Cyber.phase, Cyber.addr, Cyber.body, Cyber.danger = false, nil, nil, nil, nil
 	local s = state()
 	s.active, s.body, s.addr = false, nil, nil
@@ -651,12 +654,22 @@ function Cyber.debug()
 	if pos then table.insert(lines, string.format("V at %.1f, %.1f, %.1f", pos.x, pos.y, pos.z)) end
 	local t = Cyber.target
 	if t then table.insert(lines, string.format("sent to %.1f, %.1f, %.1f", t.x, t.y, t.z)) end
-	local tiles, spawned, props, propsSpawned = 0, 0, 0, 0
+	local tiles, spawned, withEntity, withCollider, props, propsSpawned = 0, 0, 0, 0, 0, 0
 	for _, floor in pairs(Cyber.floors) do
-		for _, id in ipairs(floor.tiles) do tiles = tiles + 1 if World.propSpawned(id) then spawned = spawned + 1 end end
+		for _, id in ipairs(floor.tiles) do
+			tiles = tiles + 1
+			if World.propSpawned(id) then spawned = spawned + 1 end
+			local info = World.propInfo(id)
+			if info.entity then withEntity = withEntity + 1 end
+			if info.collider then withCollider = withCollider + 1 end
+		end
 		for _, id in ipairs(floor.props) do props = props + 1 if World.propSpawned(id) then propsSpawned = propsSpawned + 1 end end
 	end
-	table.insert(lines, "floor tiles spawned " .. spawned .. "/" .. tiles .. ", props spawned " .. propsSpawned .. "/" .. props)
+	table.insert(lines, "floor tiles: asked " .. (Cyber.tilesAsked or 0) .. ", got IDs " .. tiles .. ", spawned " .. spawned ..
+		", entities " .. withEntity .. ", with collider " .. withCollider)
+	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
+	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()))
+	if World.lastError then table.insert(lines, "last game error: " .. tostring(World.lastError)) end
 	local falls = 0
 	for _ in ipairs(Cyber.falls or {}) do falls = falls + 1 end
 	table.insert(lines, "falls " .. falls .. "   last jack-out: " .. tostring(Cyber.lastReason))

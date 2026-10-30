@@ -9,6 +9,7 @@ local World = {
 local function try(fn, ...)
 	local ok, a, b = pcall(fn, ...)
 	if not ok then
+		World.lastError = tostring(a)
 		World.log("game call failed: " .. tostring(a))
 		return nil, tostring(a)
 	end
@@ -126,6 +127,30 @@ end
 function World.propSpawned(id)
 	if id == nil then return false end
 	return try(function() return Game.GetStaticEntitySystem():IsSpawned(id) end) == true
+end
+
+-- Details for 'cyber debug': does the entity exist, and does it have a collider?
+function World.propInfo(id)
+	local info = { entity = false, collider = false }
+	if id == nil then return info end
+	try(function()
+		local entity = Game.GetStaticEntitySystem():GetEntity(id)
+		if entity == nil then return end
+		info.entity = true
+		for _, comp in ipairs(entity:GetComponents()) do
+			if comp:IsA("entColliderComponent") then info.collider = true end
+		end
+	end)
+	return info
+end
+
+-- How many floor tiles redscript has given a collider (Cyberspace.reds).
+function World.collidersAdded()
+	return try(function()
+		local system = Game.GetScriptableSystemsContainer():Get("RealNetrunning.RNCyberspaceSystem")
+		if system == nil then return "redscript system not found" end
+		return system:CollidersAdded()
+	end)
 end
 
 function World.despawnProp(id)

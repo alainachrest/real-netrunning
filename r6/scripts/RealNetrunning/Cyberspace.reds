@@ -18,6 +18,7 @@ public func RNCyberTileTemplate() -> ResRef {
 
 public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_jackedIn: Bool;
+    private let m_collidersAdded: Int32;
 
     public static func Get() -> ref<RNCyberspaceSystem> {
         return GameInstance.GetScriptableSystemsContainer(GetGameInstance())
@@ -54,6 +55,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         collider.filterData = filter;
         collider.isEnabled = true;
         template.AddComponent(collider);
+        this.m_collidersAdded += 1;
+    }
+
+    public func CollidersAdded() -> Int32 {
+        return this.m_collidersAdded;
     }
 
     // --- Lua -------------------------------------------------------------------
