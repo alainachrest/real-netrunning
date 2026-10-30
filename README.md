@@ -8,7 +8,7 @@ Version 0.1.0 — first playable build.
 
 - Cyberpunk 2077 2.5
 - Cyber Engine Tweaks 1.38 or newer
-- Optional: CyberScript with the extension API (`api-hooks-and-2.5` branch), for the CyberScript bridge
+- Optional: CyberScript with the extension API (`api-hooks-and-2.5` branch), for the CyberScript bridge https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5
 
 ## Install
 
