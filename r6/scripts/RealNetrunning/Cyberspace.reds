@@ -47,9 +47,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     }
 
     private func OnAttach() {
-        this.m_scale = 1.0;
+        this.m_scale = 1.3;
         this.m_style = 2;
-        this.m_wallStyle = 0;
+        this.m_wallStyle = 3;
         this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
         this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");

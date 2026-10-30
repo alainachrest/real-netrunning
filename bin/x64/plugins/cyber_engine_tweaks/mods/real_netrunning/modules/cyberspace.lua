@@ -513,7 +513,7 @@ function Cyber.applyLook()
 	local s = state()
 	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
 	World.cyberCall("SetWallStyle", s.walls or Kit.defaultWalls)
-	World.cyberCall("SetFloorScale", s.scale or 1.0)
+	World.cyberCall("SetFloorScale", s.scale or Kit.defaultScale)
 	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
 end
 
@@ -577,7 +577,7 @@ end
 -- 'cyber scale [x]': resize the floor mesh, if a style comes out too big or small.
 function Cyber.scale(x)
 	local s = state()
-	if x == nil then return true, "Floor scale: " .. (s.scale or 1.0) .. ". 'cyber scale <number>', 1 is normal." end
+	if x == nil then return true, "Floor scale: " .. (s.scale or Kit.defaultScale) .. ". 'cyber scale <number>', 1 is normal." end
 	x = tonumber(x)
 	if x == nil or x <= 0 then return false, "Give a number above 0, like 0.5 or 2." end
 	s.scale = math.max(0.05, math.min(20, x))
