@@ -3,12 +3,14 @@
 // -----------------------------------------------------------------------------
 //
 // Cyberspace itself is built and run by the Lua mod (modules/cyberspace.lua).
-// This file does the two things only redscript can:
+// This file does what only redscript can:
 //
-//  * Floor tiles. Lua spawns the game's own empty entity template as invisible
-//    floor tiles; when one is built, a static box collider is added to it, so
-//    V can walk on cyberspace floors whatever meshes are drawn on top.
-//  * Saving. Manual and quick saves are blocked while V is jacked in.
+//  * Blocks. Lua asks for floor slabs, walls and door barriers of any size.
+//    Each is the game's own empty entity with a static box collider (so V can
+//    stand on it and can't walk through it) and one of the game's cyberspace
+//    meshes, measured when it loads and stretched to fit the box.
+//  * The sky while jacked in.
+//  * Saving: manual and quick saves are blocked while V is jacked in.
 
 module RealNetrunning
 
@@ -16,17 +18,28 @@ public func RNCyberTileTemplate() -> ResRef {
     return r"base\\quest\\main_quests\\part1\\q115\\test\\empty_entity.ent";
 }
 
+// One loaded mesh and its real size.
+public class RNMeshFit {
+    public let style: Int32;
+    public let ready: Bool;
+    public let min: Vector4;
+    public let max: Vector4;
+    public let token: ref<ResourceToken>;
+}
+
 public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_jackedIn: Bool;
     private let m_collidersAdded: Int32;
-    private let m_style: Int32;
+    private let m_style: Int32;      // floor mesh
+    private let m_wallStyle: Int32;  // wall mesh
     private let m_scale: Float;
-    // the chosen floor mesh's real size, read from the mesh once it's loaded
-    private let m_boundsMin: Vector4;
-    private let m_boundsMax: Vector4;
-    private let m_boundsStyle: Int32;
-    private let m_boundsReady: Bool;
-    private let m_meshToken: ref<ResourceToken>;
+    private let m_floorFit: ref<RNMeshFit>;
+    private let m_wallFit: ref<RNMeshFit>;
+
+    // the size and kind of each block Lua asked for, looked up when it's built
+    private let m_pending: Vector4;  // half x, half y, half z, kind
+    private let m_blockIDs: array<EntityID>;
+    private let m_blockSizes: array<Vector4>;
 
     public static func Get() -> ref<RNCyberspaceSystem> {
         return GameInstance.GetScriptableSystemsContainer(GetGameInstance())
@@ -36,48 +49,104 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private func OnAttach() {
         this.m_scale = 1.0;
         this.m_style = 2;
-        this.LoadFloorMesh();
-        GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnTileExtract")
+        this.m_wallStyle = 0;
+        this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
+        this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
+        this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");
+        GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnBlockExtract")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
 
-    // Loads the floor mesh so its real size is known before floors spawn.
-    private func LoadFloorMesh() {
-        this.m_boundsReady = false;
-        this.m_boundsStyle = this.m_style;
-        this.m_meshToken = GameInstance.GetResourceDepot().LoadResource(RNFloorMesh(this.m_style));
-        if IsDefined(this.m_meshToken) {
-            this.m_meshToken.RegisterCallback(this, n"OnFloorMeshLoaded");
+    // --- meshes ------------------------------------------------------------------
+
+    private func LoadFit(path: ResRef, style: Int32, callback: CName) -> ref<RNMeshFit> {
+        let fit = new RNMeshFit();
+        fit.style = style;
+        fit.token = GameInstance.GetResourceDepot().LoadResource(path);
+        if IsDefined(fit.token) {
+            fit.token.RegisterCallback(this, callback);
+        }
+        return fit;
+    }
+
+    private func Fill(fit: ref<RNMeshFit>, token: ref<ResourceToken>) {
+        let mesh = token.GetResource() as CMesh;
+        if IsDefined(fit) && IsDefined(mesh) {
+            fit.min = mesh.boundingBox.Min;
+            fit.max = mesh.boundingBox.Max;
+            fit.ready = true;
         }
     }
 
     private cb func OnFloorMeshLoaded(token: ref<ResourceToken>) {
-        let mesh = token.GetResource() as CMesh;
-        if IsDefined(mesh) && this.m_boundsStyle == this.m_style {
-            this.m_boundsMin = mesh.boundingBox.Min;
-            this.m_boundsMax = mesh.boundingBox.Max;
-            this.m_boundsReady = true;
+        if IsDefined(this.m_floorFit) && this.m_floorFit.style == this.m_style {
+            this.Fill(this.m_floorFit, token);
         }
     }
 
-    // Lua waits for this before building floors (it gives up after a few seconds).
-    public func FloorReady() -> Bool {
-        return this.m_boundsReady;
+    private cb func OnWallMeshLoaded(token: ref<ResourceToken>) {
+        if IsDefined(this.m_wallFit) && this.m_wallFit.style == this.m_wallStyle {
+            this.Fill(this.m_wallFit, token);
+        }
     }
 
-    // For 'cyber debug': the floor mesh's size in metres.
-    public func FloorMeshSize() -> String {
-        if !this.m_boundsReady {
+    // Lua waits for this before building (it gives up after a few seconds).
+    public func FloorReady() -> Bool {
+        return IsDefined(this.m_floorFit) && this.m_floorFit.ready && IsDefined(this.m_wallFit) && this.m_wallFit.ready;
+    }
+
+    private func SizeText(fit: ref<RNMeshFit>) -> String {
+        if !IsDefined(fit) || !fit.ready {
             return "not loaded";
         }
-        return FloatToStringPrec(this.m_boundsMax.X - this.m_boundsMin.X, 2) + " x " +
-            FloatToStringPrec(this.m_boundsMax.Y - this.m_boundsMin.Y, 2) + " x " +
-            FloatToStringPrec(this.m_boundsMax.Z - this.m_boundsMin.Z, 2);
+        return FloatToStringPrec(fit.max.X - fit.min.X, 2) + " x " +
+            FloatToStringPrec(fit.max.Y - fit.min.Y, 2) + " x " +
+            FloatToStringPrec(fit.max.Z - fit.min.Z, 2);
     }
 
-    // Each floor is one 24 x 24 m platform, 1 m thick, centred on its position:
-    // an invisible collider to stand on, with the floor mesh stretched over it.
-    private cb func OnTileExtract(event: ref<EntityBuilderEvent>) {
+    // For 'cyber debug'.
+    public func FloorMeshSize() -> String {
+        return "floor " + this.SizeText(this.m_floorFit) + ", wall " + this.SizeText(this.m_wallFit);
+    }
+
+    // --- blocks --------------------------------------------------------------------
+
+    // kind 0: floor slab (its mesh's top is the top of the box)
+    // kind 1: wall or door barrier (its mesh fills the box)
+    public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
+        this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
+        let rotation: EulerAngles;
+        rotation.Yaw = yaw;
+        let spec = new StaticEntitySpec();
+        spec.templatePath = RNCyberTileTemplate();
+        spec.position = Vector4(x, y, z, 1.0);
+        spec.orientation = EulerAngles.ToQuat(rotation);
+        spec.attached = true;
+        let id = GameInstance.GetStaticEntitySystem().SpawnEntity(spec);
+        ArrayPush(this.m_blockIDs, id);
+        ArrayPush(this.m_blockSizes, this.m_pending);
+        return id;
+    }
+
+    // Lua calls this on jack-out, so the size list doesn't grow forever.
+    public func ForgetBlocks() {
+        ArrayClear(this.m_blockIDs);
+        ArrayClear(this.m_blockSizes);
+    }
+
+    private func SizeOf(id: EntityID) -> Vector4 {
+        let i = ArraySize(this.m_blockIDs) - 1;
+        while i >= 0 {
+            if Equals(this.m_blockIDs[i], id) {
+                return this.m_blockSizes[i];
+            }
+            i -= 1;
+        }
+        // built before SpawnBlock returned: it's the block being spawned right now
+        return this.m_pending;
+    }
+
+    private cb func OnBlockExtract(event: ref<EntityBuilderEvent>) {
         let builder = event.GetEntityBuilder();
         if !IsDefined(builder) {
             return;
@@ -86,6 +155,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         if !IsDefined(template) {
             return;
         }
+        let size = this.SizeOf(builder.GetEntityID());
+        let kind = RoundF(size.W);
+
         // The preset name alone leaves the collision masks empty (collides with
         // nothing), so build the masks from the preset as well.
         let filter = new physicsFilterData();
@@ -96,7 +168,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         filter.queryFilter = QueryFilter.ALL();
 
         let box = new physicsColliderBox();
-        box.halfExtents = Vector3(RNFloorHalf(), RNFloorHalf(), 0.5);
+        box.halfExtents = Vector3(size.X, size.Y, size.Z);
         box.filterData = filter;
         let shapes: array<ref<physicsICollider>>;
         ArrayPush(shapes, box);
@@ -109,60 +181,82 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         template.AddComponent(collider);
         this.m_collidersAdded += 1;
 
-        // What V sees: the chosen floor style ('cyber style' in the deck), fitted
-        // to the platform from the mesh's real size when it's known.
-        let style = this.m_style;
-        let floor = new MeshComponent();
-        floor.mesh *= RNFloorMesh(style);
-        floor.meshAppearance = n"default";
-        let sx = this.m_scale;
-        let sy = this.m_scale;
+        // What V sees: the chosen mesh, stretched to the box.
+        let fit = kind == 1 ? this.m_wallFit : this.m_floorFit;
+        let visual = new MeshComponent();
+        let path = RNFloorMesh(this.m_style);
+        if kind == 1 {
+            path = RNWallMesh(this.m_wallStyle);
+        }
+        visual.mesh *= path;
+        visual.meshAppearance = n"default";
+        let sx = 1.0;
+        let sy = 1.0;
         let sz = 1.0;
         let cx = 0.0;
         let cy = 0.0;
-        let top = 0.0;
-        if this.m_boundsReady && this.m_boundsStyle == style {
-            let width = MaxF(0.1, this.m_boundsMax.X - this.m_boundsMin.X);
-            let depth = MaxF(0.1, this.m_boundsMax.Y - this.m_boundsMin.Y);
-            sx = RNFloorHalf() * 2.0 / width * this.m_scale;
-            sy = RNFloorHalf() * 2.0 / depth * this.m_scale;
-            cx = (this.m_boundsMax.X + this.m_boundsMin.X) / 2.0;
-            cy = (this.m_boundsMax.Y + this.m_boundsMin.Y) / 2.0;
-            top = this.m_boundsMax.Z;
+        let cz = 0.0;
+        let offsetZ = 0.0;
+        if IsDefined(fit) && fit.ready {
+            sx = size.X * 2.0 / MaxF(0.1, fit.max.X - fit.min.X);
+            sy = size.Y * 2.0 / MaxF(0.1, fit.max.Y - fit.min.Y);
+            cx = (fit.max.X + fit.min.X) / 2.0;
+            cy = (fit.max.Y + fit.min.Y) / 2.0;
+            if kind == 1 {
+                sz = size.Z * 2.0 / MaxF(0.1, fit.max.Z - fit.min.Z);
+                cz = (fit.max.Z + fit.min.Z) / 2.0;
+            } else {
+                // floors keep their own thickness; the top goes where V walks
+                cz = fit.max.Z;
+                offsetZ = size.Z;
+            }
         }
-        floor.visualScale = Vector3(sx, sy, sz);
+        if kind == 0 {
+            sx = sx * this.m_scale;
+            sy = sy * this.m_scale;
+        }
+        visual.visualScale = Vector3(sx, sy, sz);
         let place: WorldTransform;
-        // centre the mesh on the platform and put its top surface where V walks
-        WorldTransform.SetPosition(place, Vector4(-cx * sx, -cy * sy, 0.5 - top * sz, 1.0));
+        WorldTransform.SetPosition(place, Vector4(-cx * sx, -cy * sy, offsetZ - cz * sz, 1.0));
         WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
-        floor.localTransform = place;
-        floor.isEnabled = true;
-        template.AddComponent(floor);
+        visual.localTransform = place;
+        visual.isEnabled = true;
+        template.AddComponent(visual);
     }
 
     public func CollidersAdded() -> Int32 {
         return this.m_collidersAdded;
     }
 
-    // --- Lua -------------------------------------------------------------------
+    // --- look, from Lua ----------------------------------------------------------------
 
-    // Floor styles: which mesh is drawn on each tile. Takes effect for tiles spawned after.
     public func FloorStyleCount() -> Int32 { return RNFloorStyleCount(); }
     public func FloorStyleName(i: Int32) -> String { return RNFloorName(i); }
     public func GetFloorStyle() -> Int32 { return this.m_style; }
     public func SetFloorStyle(i: Int32) {
         let style = Max(0, Min(i, RNFloorStyleCount() - 1));
-        if style != this.m_style || !this.m_boundsReady {
+        if style != this.m_style || !IsDefined(this.m_floorFit) || !this.m_floorFit.ready {
             this.m_style = style;
-            this.LoadFloorMesh();
+            this.m_floorFit = this.LoadFit(RNFloorMesh(style), style, n"OnFloorMeshLoaded");
         }
     }
+
+    public func WallStyleCount() -> Int32 { return RNWallStyleCount(); }
+    public func WallStyleName(i: Int32) -> String { return RNWallName(i); }
+    public func SetWallStyle(i: Int32) {
+        let style = Max(0, Min(i, RNWallStyleCount() - 1));
+        if style != this.m_wallStyle || !IsDefined(this.m_wallFit) || !this.m_wallFit.ready {
+            this.m_wallStyle = style;
+            this.m_wallFit = this.LoadFit(RNWallMesh(style), style, n"OnWallMeshLoaded");
+        }
+    }
+
     public func SetFloorScale(scale: Float) {
         this.m_scale = MaxF(0.05, MinF(scale, 20.0));
     }
     public func GetFloorScale() -> Float { return this.m_scale; }
 
-    // Sky presets while jacked in ('cyber sky'). 0 leaves the weather alone.
+    // Sky presets while jacked in ('cyber sky'). 0 puts the normal weather back.
     public func SkyCount() -> Int32 { return 6; }
     public func SkyName(i: Int32) -> String {
         if i == 1 {
@@ -207,53 +301,47 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     }
 }
 
-// --- floor styles --------------------------------------------------------------
-// Each mesh is measured when it loads and stretched to fit the platform.
-// 'cyber scale' still multiplies that, for meshes with a border or overhang.
+// --- floor and wall styles -------------------------------------------------------
+// Every mesh is measured when it loads and stretched to fit its block.
 
 public func RNFloorStyleCount() -> Int32 { return 6; }
 
 public func RNFloorName(i: Int32) -> String {
-    if i == 1 {
-        return "Mikoshi prison floor";
-    }
-    if i == 2 {
-        return "Mikoshi prison platform";
-    }
-    if i == 3 {
-        return "Mikoshi square floor";
-    }
-    if i == 4 {
-        return "Cyberspace module";
-    }
-    if i == 5 {
-        return "Relic cyberspace deck";
-    }
+    if i == 1 { return "Mikoshi prison floor"; }
+    if i == 2 { return "Mikoshi prison platform"; }
+    if i == 3 { return "Mikoshi square floor"; }
+    if i == 4 { return "Cyberspace module"; }
+    if i == 5 { return "Relic cyberspace deck"; }
     return "Arasaka Tower Mikoshi platform";
 }
 
 public func RNFloorMesh(i: Int32) -> ResRef {
-    if i == 1 {
-        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_floor_a.mesh";
-    }
-    if i == 2 {
-        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_platform_a.mesh";
-    }
-    if i == 3 {
-        return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_square_deco_floor_a.mesh";
-    }
-    if i == 4 {
-        return r"base\\environment\\architecture\\_temp\\cyberspace\\cyberspace_module_a.mesh";
-    }
-    if i == 5 {
-        return r"base\\environment\\quests\\q101_cyberspace\\q101_cyberspace_deco_a.mesh";
-    }
+    if i == 1 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_floor_a.mesh"; }
+    if i == 2 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_platform_a.mesh"; }
+    if i == 3 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_square_deco_floor_a.mesh"; }
+    if i == 4 { return r"base\\environment\\architecture\\_temp\\cyberspace\\cyberspace_module_a.mesh"; }
+    if i == 5 { return r"base\\environment\\quests\\q101_cyberspace\\q101_cyberspace_deco_a.mesh"; }
     return r"base\\environment\\architecture\\city_center\\arasaka_tower\\interior\\mikoshi_port\\mikoshi_platform_piece_a.mesh";
 }
 
-// Half the width of a floor platform, in metres (matches cyberkit.lua).
-public func RNFloorHalf() -> Float {
-    return 12.0;
+public func RNWallStyleCount() -> Int32 { return 6; }
+
+public func RNWallName(i: Int32) -> String {
+    if i == 1 { return "Mikoshi prison wall B"; }
+    if i == 2 { return "Mikoshi prison wall C"; }
+    if i == 3 { return "Mikoshi cyberspace wall"; }
+    if i == 4 { return "Mikoshi frontier wall"; }
+    if i == 5 { return "Mikoshi deco wall"; }
+    return "Mikoshi prison wall A";
+}
+
+public func RNWallMesh(i: Int32) -> ResRef {
+    if i == 1 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_wall_b.mesh"; }
+    if i == 2 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_wall_c.mesh"; }
+    if i == 3 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_wall.mesh"; }
+    if i == 4 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_wall_frontier_a.mesh"; }
+    if i == 5 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_deco_wall.mesh"; }
+    return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_prison_archi_wall_a.mesh";
 }
 
 public func RNSavingBlocked() -> Bool {

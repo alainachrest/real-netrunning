@@ -77,8 +77,9 @@ Connect to a network and type `jackin`: V's body stays where it is, and V walks 
 
 Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
 
-- Every floor of the network is a platform, stacked downwards. Walk to the way down at the far end of each one to descend; the way back up is behind where you land.
-- **ICE** stands guard at the way down as the owner's own netrunners: gang netrunners on gang nets, corporate security on corp nets, Voodoo Boys-grade elites for Black ICE. Take them down and the next floor opens. Fighting ICE raises your trace. You can still `breach` from the deck instead: use the gate, or type it.
+- Every floor of the network is a small complex of 16 m rooms (2 x 2 up to 3 x 3), with walls and doorways, stacked downwards. You arrive in one room; the way down is in the room furthest away, and data objects are spread through the rooms in between. Layouts are generated from your save, so each network's floors are the same every visit.
+- While the floor below is locked, the doorway into the room with the way down is sealed by a barrier you can't walk through.
+- **ICE** stands guard at the sealed doorway as the owner's own netrunners: gang netrunners on gang nets, corporate security on corp nets, Voodoo Boys-grade elites for Black ICE. Take them down and the next floor opens. Fighting ICE raises your trace. You can still `breach` from the deck instead: use the gate, or type it.
 - **Data objects** on each floor are its files. Use one to download paydata, or to read it in the deck.
 - **Password gates** open your deck to type the code or `crack` it. Control floors have a device console; the core is the bottom floor.
 - **NetWatch** agents who trace into the network show up in person. Kill one for the same bounty as `fight`.
@@ -86,7 +87,7 @@ Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
 - Jack out with the hotkey, `jackout`, or the exit node on the first floor. You're thrown out, with dumpshock, if you're traced, if your health drops too low (not on Black ICE floors: Black ICE kills), or if something finds your body. Jacking in from one of V's own home computers keeps your body safe.
 - Terminal and cyberspace are the same network: anything opened in one is open in the other.
 - If a save ever loads while V was in cyberspace, V wakes up back where they jacked in.
-- Change the look in the deck, live: `cyber style` picks the floor from the game's own cyberspace meshes, `cyber scale` resizes it, and `cyber sky` sets the weather while you're jacked in (put back when you leave). Your choices are kept per save.
+- Change the look in the deck, live: `cyber style` picks the floor and `cyber walls` the walls from the game's own cyberspace meshes, `cyber scale` resizes it, and `cyber sky` sets the weather while you're jacked in (put back when you leave). Your choices are kept per save.
 
 ## Beyond Night City
 

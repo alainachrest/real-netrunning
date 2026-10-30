@@ -12,9 +12,12 @@ Kit.origin = { x = -1085.0, y = 880.0, z = 9000.0 }
 
 -- Each floor of a network is a square platform; floors are stacked downwards.
 Kit.floorGap = 18.0      -- metres between floors
-Kit.tileSize = 24.0      -- one 24 x 24 m platform per floor (RNFloorHalf in Cyberspace.reds)
-Kit.tilesPerSide = 1
-Kit.defaultStyle = 2     -- Mikoshi prison platform
+Kit.roomSize = 16.0      -- each floor is a grid of 16 x 16 m rooms
+Kit.doorWidth = 4.0      -- doorways between rooms
+Kit.wallHeight = 6.0
+Kit.wallThickness = 0.5
+Kit.defaultStyle = 2     -- floor: Mikoshi prison platform
+Kit.defaultWalls = 0     -- walls: Mikoshi prison wall A
 -- the big scenery (point clouds, particles) stands well away from the platforms
 Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
 Kit.useRadius = 2.6      -- how close V must be to use an object

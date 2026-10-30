@@ -21,6 +21,7 @@ local Lore = require("modules/lore")
 local World = require("modules/world")
 local Kit = require("modules/cyberkit")
 local NetWatch = require("modules/netwatch")
+local Rng = require("modules/rng")
 
 local Cyber = {
 	active = false,
@@ -67,21 +68,96 @@ local function state()
 end
 
 ---------------------------------------------------------------------------
--- Layout
+-- Layout: every floor is a small complex of rooms joined by doorways
 ---------------------------------------------------------------------------
 
 local function centre(i)
 	return Kit.origin.x, Kit.origin.y, Kit.origin.z - (i - 1) * Kit.floorGap
 end
 
+-- The rooms of floor i: a grid of cells, a spanning tree of doorways (so every
+-- room can be reached) and the odd extra doorway for loops. The way down is
+-- in the room furthest from where V arrives, behind a single doorway that
+-- seals while the floor below is locked. The same for every visit to a network.
+function Cyber.layout(net, i, f)
+	local rng = Rng.new(Network.state.seed or 0, "rooms", net.addr, i)
+	local big = net.ice >= 4 or net.tier >= 2
+	local w = (f.kind == "lobby" or f.kind == "core") and 2 or (big and 3 or 2)
+	local h = (f.kind == "files" or f.kind == "control" or big) and 3 or 2
+	local doors = {}
+	local function key(ax, ay, bx, by)
+		if ax > bx or (ax == bx and ay > by) then ax, ay, bx, by = bx, by, ax, ay end
+		return ax .. "," .. ay .. "|" .. bx .. "," .. by
+	end
+	local visited, depth, parent, degree = {}, {}, {}, {}
+	local function id(x, y) return x .. "," .. y end
+	local function neighbours(x, y)
+		local list = {}
+		for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+			local nx, ny = x + d[1], y + d[2]
+			if nx >= 0 and nx < w and ny >= 0 and ny < h then table.insert(list, { nx, ny }) end
+		end
+		return list
+	end
+	-- randomised depth-first search from the arrival room
+	local stack = { { 0, 0 } }
+	visited[id(0, 0)], depth[id(0, 0)] = true, 0
+	while #stack > 0 do
+		local top = stack[#stack]
+		local options = {}
+		for _, n in ipairs(neighbours(top[1], top[2])) do
+			if not visited[id(n[1], n[2])] then table.insert(options, n) end
+		end
+		if #options == 0 then
+			table.remove(stack)
+		else
+			local n = options[rng:int(1, #options)]
+			visited[id(n[1], n[2])] = true
+			depth[id(n[1], n[2])] = depth[id(top[1], top[2])] + 1
+			parent[id(n[1], n[2])] = { top[1], top[2] }
+			doors[key(top[1], top[2], n[1], n[2])] = true
+			degree[id(top[1], top[2])] = (degree[id(top[1], top[2])] or 0) + 1
+			degree[id(n[1], n[2])] = (degree[id(n[1], n[2])] or 0) + 1
+			table.insert(stack, n)
+		end
+	end
+	-- the way down: the deepest room with a single doorway
+	local goal, best = { w - 1, h - 1 }, -1
+	for x = 0, w - 1 do
+		for y = 0, h - 1 do
+			local d = depth[id(x, y)] or 0
+			if (x ~= 0 or y ~= 0) and (degree[id(x, y)] or 0) == 1 and d > best then goal, best = { x, y }, d end
+		end
+	end
+	-- one extra doorway for a loop, never into the goal room
+	if w * h >= 6 then
+		for _ = 1, 8 do
+			local x, y = rng:int(0, w - 1), rng:int(0, h - 1)
+			local n = neighbours(x, y)[rng:int(1, #neighbours(x, y))]
+			local k = key(x, y, n[1], n[2])
+			local touchesGoal = (x == goal[1] and y == goal[2]) or (n[1] == goal[1] and n[2] == goal[2])
+			if not doors[k] and not touchesGoal then doors[k] = true break end
+		end
+	end
+	return { w = w, h = h, doors = doors, key = key, start = { 0, 0 }, goal = goal, parent = parent[id(goal[1], goal[2])] }
+end
+
+local function cellCentre(i, layout, x, y)
+	local cx, cy, cz = centre(i)
+	local r = Kit.roomSize
+	return cx + (x - (layout.w - 1) / 2) * r, cy + (y - (layout.h - 1) / 2) * r, cz
+end
+
 function Cyber.arrivalPoint(i)
-	local x, y, z = centre(i)
-	return x + Kit.arrival.x, y + Kit.arrival.y, z
+	local floor = Cyber.floors[i]
+	if floor and floor.arrival then return floor.arrival.x, floor.arrival.y, floor.arrival.z end
+	return centre(i)
 end
 
 local function descentPoint(i)
-	local x, y, z = centre(i)
-	return x + Kit.descent.x, y + Kit.descent.y, z
+	local floor = Cyber.floors[i]
+	if floor and floor.descent then return floor.descent.x, floor.descent.y, floor.descent.z end
+	return centre(i)
 end
 
 -- Files on one floor, flattened: { path, node }
@@ -96,25 +172,11 @@ local function floorFiles(net, i, f)
 		for _, name in ipairs(names) do
 			local child = node.children[name]
 			if child.dir then walk(child, path .. "/" .. name)
-			elseif #list < 10 then table.insert(list, { path = path .. "/" .. name, node = child }) end
+			elseif #list < 12 then table.insert(list, { path = path .. "/" .. name, node = child }) end
 		end
 	end
 	if root then walk(root, "/" .. folder) end
 	return list
-end
-
--- Positions on the left and right of a floor, clear of the way up and down.
-local function ringPositions(n)
-	local points = {}
-	for k = 1, n do
-		local side = (k % 2 == 1) and 0 or math.pi
-		local slot = math.floor((k - 1) / 2)
-		local per = math.ceil(n / 2)
-		local spread = math.rad(110)
-		local angle = side - spread / 2 + (per > 1 and spread * slot / (per - 1) or spread / 2)
-		table.insert(points, { math.cos(angle) * Kit.ringRadius, math.sin(angle) * Kit.ringRadius })
-	end
-	return points
 end
 
 local function addObject(i, kind, x, y, z, label, extra)
@@ -136,6 +198,16 @@ local function prop(list, path, x, y, z, yaw)
 	return id
 end
 
+-- A floor slab or wall: spec = { x, y, z, yaw, hx, hy, hz, kind }. Kept on the
+-- floor so the whole floor can be rebuilt in a new style.
+local function block(floor, spec)
+	Cyber.tilesAsked = (Cyber.tilesAsked or 0) + 1
+	table.insert(floor.specs, spec)
+	local id = World.spawnBlock(spec.x, spec.y, spec.z, spec.yaw, spec.hx, spec.hy, spec.hz, spec.kind)
+	if id ~= nil then table.insert(floor.tiles, id) end
+	return id
+end
+
 local function fileLabel(net, file)
 	local name = file.path:match("([^/]+)$")
 	if file.node.paydata then
@@ -145,47 +217,99 @@ local function fileLabel(net, file)
 	return name
 end
 
+-- A wall along one edge of a cell, with a doorway gap if there's a door.
+-- along "x": the wall runs east-west at y = wy; along "y": north-south at x = wx.
+local function wall(floor, along, mx, my, z, door)
+	local r, d, t = Kit.roomSize, Kit.doorWidth, Kit.wallThickness
+	local hz = Kit.wallHeight / 2
+	local yaw = along == "x" and 0 or 90
+	local function segment(offset, length)
+		local x = along == "x" and mx + offset or mx
+		local y = along == "y" and my + offset or my
+		block(floor, { x = x, y = y, z = z + hz, yaw = yaw, hx = length / 2, hy = t / 2, hz = hz, kind = 1 })
+	end
+	if not door then
+		segment(0, r)
+	else
+		local length = (r - d) / 2
+		segment(-(d / 2 + length / 2), length)
+		segment(d / 2 + length / 2, length)
+	end
+end
+
 local function buildFloor(net, i, f, count)
 	local cx, cy, cz = centre(i)
-	local floor = { z = cz, tiles = {}, props = {}, ice = {}, iceHostile = {}, corpses = {}, objects = {}, kind = f.kind }
+	local floor = { z = cz, tiles = {}, specs = {}, props = {}, ice = {}, iceHostile = {}, corpses = {}, objects = {}, kind = f.kind }
 	Cyber.floors[i] = floor
+	local L = Cyber.layout(net, i, f)
+	floor.layout = L
+	local r = Kit.roomSize
 
-	local half = math.floor(Kit.tilesPerSide / 2)
-	for a = -half, half do
-		for b = -half, half do
-			Cyber.tilesAsked = (Cyber.tilesAsked or 0) + 1
-			local id = World.spawnTile(cx + a * Kit.tileSize, cy + b * Kit.tileSize, cz - 0.5)
-			if id ~= nil then table.insert(floor.tiles, id) end
+	-- slabs and walls
+	for x = 0, L.w - 1 do
+		for y = 0, L.h - 1 do
+			local rx, ry = cellCentre(i, L, x, y)
+			block(floor, { x = rx, y = ry, z = cz - 0.5, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.5, kind = 0 })
+			if x == 0 then wall(floor, "y", rx - r / 2, ry, cz, false) end
+			if y == 0 then wall(floor, "x", rx, ry - r / 2, cz, false) end
+			wall(floor, "y", rx + r / 2, ry, cz, x < L.w - 1 and L.doors[L.key(x, y, x + 1, y)])
+			wall(floor, "x", rx, ry + r / 2, cz, y < L.h - 1 and L.doors[L.key(x, y, x, y + 1)])
 		end
 	end
 
-	if i > 1 then
-		local x, y = Cyber.arrivalPoint(i)
-		addObject(i, "up", x, y - 3.0, cz, "Back up to floor " .. (i - 1))
-	end
-	if i < count then
-		local x, y = descentPoint(i)
-		addObject(i, "down", x, y, cz, "Down to floor " .. (i + 1))
-	end
-	if i == 1 then
-		addObject(i, "exit", cx - 7, cy - 7, cz, "Jack out")
+	-- arriving, leaving
+	local sx, sy = cellCentre(i, L, L.start[1], L.start[2])
+	floor.arrival = { x = sx, y = sy - 3, z = cz }
+	if i > 1 then addObject(i, "up", sx, sy - 6, cz, "Back up to floor " .. (i - 1)) end
+	if i == 1 then addObject(i, "exit", sx - 5, sy + 5, cz, "Jack out") end
+	local gx, gy = cellCentre(i, L, L.goal[1], L.goal[2])
+	floor.descent = { x = gx, y = gy, z = cz }
+	if i < count then addObject(i, "down", gx, gy, cz, "Down to floor " .. (i + 1)) end
+
+	-- the doorway into the goal room, where a locked floor below is sealed
+	if L.parent then
+		local px, py = cellCentre(i, L, L.parent[1], L.parent[2])
+		local doorX, doorY = (gx + px) / 2, (gy + py) / 2
+		local along = (L.parent[2] == L.goal[2]) and "y" or "x"
+		floor.door = { x = doorX, y = doorY, z = cz, along = along }
+		floor.iceSpot = { x = px + (doorX - px) * 0.4, y = py + (doorY - py) * 0.4, z = cz }
+		-- facing the door from the parent room
+		floor.gateUse = { x = doorX + (px - doorX) * 0.18, y = doorY + (py - doorY) * 0.18 }
 	end
 
+	-- data objects in the rooms between
+	local rooms = {}
+	for x = 0, L.w - 1 do
+		for y = 0, L.h - 1 do
+			local isStart = x == L.start[1] and y == L.start[2]
+			local isGoal = x == L.goal[1] and y == L.goal[2]
+			if not isStart and not isGoal then table.insert(rooms, { x, y }) end
+		end
+	end
+	if #rooms == 0 then rooms = { L.start } end
+	local slots = { { -4, -4 }, { 4, 4 }, { -4, 4 }, { 4, -4 } }
+	local used = {}
+	local function place(k)
+		local room = rooms[(k - 1) % #rooms + 1]
+		local rid = room[1] .. "," .. room[2]
+		used[rid] = (used[rid] or 0) + 1
+		local slot = slots[(used[rid] - 1) % #slots + 1]
+		local rx, ry = cellCentre(i, L, room[1], room[2])
+		return rx + slot[1], ry + slot[2]
+	end
 	local files = floorFiles(net, i, f)
-	local slots = ringPositions(#files + ((f.kind == "control" or f.kind == "core") and 1 or 0))
 	for k, file in ipairs(files) do
-		local x, y = cx + slots[k][1], cy + slots[k][2]
+		local x, y = place(k)
 		prop(floor.props, Kit.templates.data, x, y, cz, 0)
 		addObject(i, "file", x, y, cz, fileLabel(net, file), { path = file.path, node = file.node })
 	end
 	if f.kind == "control" then
-		local s = slots[#files + 1]
-		prop(floor.props, Kit.templates.console, cx + s[1], cy + s[2], cz, 0)
-		addObject(i, "console", cx + s[1], cy + s[2], cz, "Device control")
+		local x, y = place(#files + 1)
+		prop(floor.props, Kit.templates.console, x, y, cz, 0)
+		addObject(i, "console", x, y, cz, "Device control")
 	elseif f.kind == "core" then
-		local s = slots[#files + 1]
-		prop(floor.props, Kit.templates.core, cx, cy, cz, 0)
-		addObject(i, "core", cx + s[1], cy + s[2], cz, "Network core")
+		prop(floor.props, Kit.templates.core, gx, gy, cz, 0)
+		addObject(i, "core", gx, gy + 3, cz, "Network core")
 	end
 end
 
@@ -201,22 +325,33 @@ local function isIceLock(f)
 	return f and (f.kind == "ice" or f.kind == "black" or (f.kind == "core" and f.ice > 0))
 end
 
+-- Locked floor below: the doorway into the room with the way down is sealed
+-- by a barrier V can't walk through, with ICE (or a password gate) in front.
 local function refreshGates()
 	for i, floor in pairs(Cyber.floors) do
 		local lock = lockAfter(i)
-		if lock and floor.gate == nil then
-			local x, y, z = descentPoint(i)
-			local template = lock.kind == "black" and Kit.templates.blackIceGate
-				or (lock.kind == "password" and Kit.templates.passwordGate or Kit.templates.iceGate)
-			floor.gate = World.spawnProp(template, x, y - 1.0, z, 0)
+		local door = floor.door
+		if lock and floor.gate == nil and door then
+			local yaw = door.along == "x" and 0 or 90
+			local barrier = World.spawnBlock(door.x, door.y, door.z + Kit.wallHeight / 2, yaw,
+				Kit.doorWidth / 2 + 0.2, Kit.wallThickness, Kit.wallHeight / 2, 1)
+			local template = lock.kind == "black" and Kit.templates.blackIceGate or Kit.templates.iceGate
+			local look = World.spawnProp(template, door.x, door.y, door.z, yaw)
+			floor.gate = { barrier = barrier, look = look }
+			if floor.gateUse then
+				floor.gateObject = addObject(i, "gate", floor.gateUse.x, floor.gateUse.y, floor.z, "Sealed doorway")
+			end
 		elseif not lock and floor.gate ~= nil then
-			World.despawnProp(floor.gate)
+			World.despawnProp(floor.gate.barrier)
+			World.despawnProp(floor.gate.look)
 			floor.gate = nil
+			if floor.gateObject then floor.gateObject.kind = "spent" floor.gateObject = nil end
 			if #floor.ice > 0 then
 				for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 				floor.ice, floor.iceHostile = {}, {}
 				say("The ICE guarding floor " .. (i + 1) .. " crashes.", "ok")
 			end
+			say("The doorway on floor " .. i .. " opens.", "ok")
 		end
 	end
 end
@@ -248,10 +383,14 @@ local function clear()
 		for _, id in ipairs(floor.props) do World.despawnProp(id) end
 		for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 		for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
-		if floor.gate then World.despawnProp(floor.gate) end
+		if floor.gate then
+			World.despawnProp(floor.gate.barrier)
+			World.despawnProp(floor.gate.look)
+		end
 	end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
 	if Cyber.agentNPC then World.deleteNPC(Cyber.agentNPC) end
+	World.cyberCall("ForgetBlocks")
 	Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC = {}, {}, {}, nil
 end
 
@@ -302,7 +441,8 @@ function Cyber.jackIn()
 	Cyber.closeDeck()
 	Cyber.applyLook()
 	Cyber.tilesAsked, Cyber.propsAsked, World.lastError, Cyber.failedProps = 0, 0, nil, {}
-	build()
+	-- the floor and wall meshes load first, so blocks can be fitted to them (see update)
+	Cyber.phase, Cyber.prepareTimer = "preparing", 4.0
 	emit("cyber.jackin", { addr = addr })
 	return true, "Jacking in to " .. net.name .. "..."
 end
@@ -372,23 +512,20 @@ end
 function Cyber.applyLook()
 	local s = state()
 	World.cyberCall("SetFloorStyle", s.style or Kit.defaultStyle)
+	World.cyberCall("SetWallStyle", s.walls or Kit.defaultWalls)
 	World.cyberCall("SetFloorScale", s.scale or 1.0)
 	if (s.sky or 0) > 0 then World.cyberCall("SetSky", s.sky) end
 end
 
--- New floor tiles (with the current style) go in before the old ones go,
--- so V never stands on nothing.
+-- The rooms are rebuilt in the current style: the new blocks go in before
+-- the old ones go, so V never stands on nothing.
 local function respawnTiles()
 	for _, floor in pairs(Cyber.floors) do
 		local old = floor.tiles
 		floor.tiles = {}
-		local cx, cy = Kit.origin.x, Kit.origin.y
-		local half = math.floor(Kit.tilesPerSide / 2)
-		for a = -half, half do
-			for b = -half, half do
-				local id = World.spawnTile(cx + a * Kit.tileSize, cy + b * Kit.tileSize, floor.z - 0.5)
-				if id ~= nil then table.insert(floor.tiles, id) end
-			end
+		for _, s in ipairs(floor.specs or {}) do
+			local id = World.spawnBlock(s.x, s.y, s.z, s.yaw, s.hx, s.hy, s.hz, s.kind)
+			if id ~= nil then table.insert(floor.tiles, id) end
 		end
 		floor.oldTiles = old
 	end
@@ -418,6 +555,23 @@ function Cyber.style(n)
 	World.cyberCall("SetFloorStyle", n)
 	if Cyber.active then Cyber.restyleTimer = 4.0 end
 	return true, "Floor style: " .. tostring(World.cyberCall("FloorStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
+end
+
+-- 'cyber walls [n]': which of the game's meshes the walls are drawn with.
+function Cyber.walls(n)
+	local s = state()
+	local count = World.cyberCall("WallStyleCount") or 0
+	if count == 0 then return false, "Cyberspace styles need the r6 scripts." end
+	if n == nil then
+		return true, "Wall styles ('cyber walls <number>'):\n" ..
+			listChoices(count, function(i) return World.cyberCall("WallStyleName", i) end, s.walls or Kit.defaultWalls)
+	end
+	n = math.floor(tonumber(n) or -1)
+	if n < 0 or n >= count then return false, "Pick a wall style from 0 to " .. (count - 1) .. "." end
+	s.walls = n
+	World.cyberCall("SetWallStyle", n)
+	if Cyber.active then Cyber.restyleTimer = 4.0 end
+	return true, "Wall style: " .. tostring(World.cyberCall("WallStyleName", n)) .. (Cyber.active and "" or " (next time you jack in)")
 end
 
 -- 'cyber scale [x]': resize the floor mesh, if a style comes out too big or small.
@@ -455,7 +609,7 @@ end
 local function nearest(pos)
 	local best, bestDistance
 	for _, o in ipairs(Cyber.objects) do
-		if math.abs(pos.z - o.z) < 3 then
+		if o.kind ~= "spent" and math.abs(pos.z - o.z) < 3 then
 			local d = math.sqrt((pos.x - o.x) ^ 2 + (pos.y - o.y) ^ 2)
 			if d <= Kit.useRadius and (bestDistance == nil or d < bestDistance) then best, bestDistance = o, d end
 		end
@@ -472,7 +626,14 @@ local function promptFor(o)
 		end
 		return "Password gate. Use to open your deck"
 	end
-	if o.kind == "file" then return o.label end
+	if o.kind == "gate" then
+		local lock = lockAfter(o.floor)
+		if lock == nil then return "Open doorway" end
+		if isIceLock(lock) then
+			return (lock.kind == "black" and "BLACK ICE" or "ICE") .. " seals this doorway. Defeat it, or use to breach"
+		end
+		return "Password-locked doorway. Use to open your deck"
+	end
 	return o.label
 end
 
@@ -493,6 +654,16 @@ function Cyber.use()
 			moveToFloor(o.floor + 1, false)
 		elseif lock.kind == "password" then
 			say("Password gate on floor " .. (o.floor + 1) .. ". Type 'password <code>' or 'crack'.", "warn")
+			Cyber.openDeck()
+		else
+			Cyber.run("breach")
+		end
+	elseif o.kind == "gate" then
+		local lock = lockAfter(o.floor)
+		if lock == nil then
+			World.notify("The doorway is open.")
+		elseif lock.kind == "password" then
+			say("Password-locked doorway to floor " .. (o.floor + 1) .. ". Type 'password <code>' or 'crack'.", "warn")
 			Cyber.openDeck()
 		else
 			Cyber.run("breach")
@@ -534,13 +705,15 @@ local function spawnIce(i)
 	local org = Lore.getOrg(net.org)
 	local record = Kit.iceRecord(net.org, org, lock.kind == "black")
 	local count = 1 + math.floor(lock.ice / 3)
-	local x, y, z = descentPoint(i)
+	local spot = floor.iceSpot
+	local x, y, z
+	if spot then x, y, z = spot.x, spot.y, spot.z else x, y, z = descentPoint(i) end
 	for k = 1, count do
 		local offset = (k - (count + 1) / 2) * 2.5
-		local id = World.spawnNPC(record, x + offset, y - 3.0, z + 0.2, 180)
+		local id = World.spawnNPC(record, x + offset, y + offset * 0.3, z + 0.2, 180)
 		if id ~= nil then table.insert(floor.ice, id) end
 	end
-	say((lock.kind == "black" and "BLACK ICE" or "ICE") .. " materialises in front of the way down. " ..
+	say((lock.kind == "black" and "BLACK ICE" or "ICE") .. " materialises in front of the sealed doorway. " ..
 		count .. (count == 1 and " program." or " programs."), lock.kind == "black" and "err" or "warn")
 	emit("cyber.ice", { addr = Cyber.addr, floor = i + 1, count = count, black = lock.kind == "black" })
 end
@@ -793,7 +966,7 @@ function Cyber.debug()
 		end
 		for _, id in ipairs(floor.props) do props = props + 1 if World.propSpawned(id) then propsSpawned = propsSpawned + 1 end end
 	end
-	table.insert(lines, "floor tiles: asked " .. (Cyber.tilesAsked or 0) .. ", got IDs " .. tiles .. ", spawned " .. spawned ..
+	table.insert(lines, "blocks (floors and walls): asked " .. (Cyber.tilesAsked or 0) .. ", got IDs " .. tiles .. ", spawned " .. spawned ..
 		", entities " .. withEntity .. ", with collider " .. withCollider)
 	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..

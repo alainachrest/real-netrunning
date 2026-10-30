@@ -251,6 +251,12 @@ function World.cyberCall(method, ...)
 	end)
 end
 
+-- A floor slab (kind 0) or wall/door barrier (kind 1) of any size: half
+-- extents hx, hy, hz around x, y, z, turned by yaw. Built in Cyberspace.reds.
+function World.spawnBlock(x, y, z, yaw, hx, hy, hz, kind)
+	return World.cyberCall("SpawnBlock", x, y, z, yaw or 0, hx, hy, hz, kind or 0)
+end
+
 -- Tells redscript V is in cyberspace (blocks manual saves).
 function World.setJackedIn(on)
 	return try(function()
