@@ -25,6 +25,20 @@ public class RNMeshFit {
     public let max: Vector4;
     public let token: ref<ResourceToken>;
     public let appearances: String; // the mesh's appearance names, for 'cyber debug'
+    public let names: array<CName>;
+}
+
+// The first of a mesh's appearances whose name contains `part` (e.g. "gold"),
+// or "default" when it has none.
+public func RNFindAppearance(fit: ref<RNMeshFit>, part: String) -> CName {
+    if IsDefined(fit) && StrLen(part) > 0 {
+        for name in fit.names {
+            if StrFindFirst(StrLower(NameToString(name)), StrLower(part)) >= 0 {
+                return name;
+            }
+        }
+    }
+    return n"default";
 }
 
 public class RNCyberspaceSystem extends ScriptableSystem {
@@ -93,6 +107,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             for appearance in mesh.appearances {
                 if IsDefined(appearance) {
                     names += (StrLen(names) > 0 ? ", " : "") + NameToString(appearance.name);
+                    ArrayPush(fit.names, appearance.name);
                 }
             }
             fit.appearances = names;
@@ -227,7 +242,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // standing with its base `lift` metres above the entity's origin.
     // upright: the mesh lies flat as made, so stand it up (90 degrees about X).
     private func FitUniform(template: ref<EntityBuilderTemplateWrapper>, fit: ref<RNMeshFit>, path: ResRef,
-                            lift: Float, size: Float, upright: Bool) {
+                            lift: Float, size: Float, upright: Bool, look: CName) {
         if !IsDefined(fit) || !fit.ready {
             return;
         }
@@ -237,7 +252,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         let cy = (fit.max.Y + fit.min.Y) / 2.0;
         let mesh = new MeshComponent();
         mesh.mesh *= path;
-        mesh.meshAppearance = n"default";
+        mesh.meshAppearance = look;
         mesh.visualScale = Vector3(s, s, s);
         let place: WorldTransform;
         if upright {
@@ -259,7 +274,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private func AddMarker(template: ref<EntityBuilderTemplateWrapper>, kind: Int32, size: Float) {
         let index = RNMarkerMeshIndex(kind);
         if index >= 0 && index < ArraySize(this.m_markerFits) {
-            this.FitUniform(template, this.m_markerFits[index], RNMarkerMesh(index), RNMarkerLift(kind), size, index == 0);
+            let fit = this.m_markerFits[index];
+            this.FitUniform(template, fit, RNMarkerMesh(index), RNMarkerLift(kind), size, index == 0,
+                RNFindAppearance(fit, RNMarkerLook(kind)));
         }
         let lumens = RNMarkerLumens(kind) * MaxF(0.3, this.m_lightLevel);
         template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), size + 4.0, lumens, RNMarkerLift(kind) + size * 0.5));
@@ -562,21 +579,26 @@ public func RNLightColour(i: Int32) -> Color {
 }
 
 // --- markers -------------------------------------------------------------------------
-// kind 10 data and 12 data already taken (hologram screens), 11 paydata (a red
-// hologram of numbers),
+// kind 10 data and 12 data already taken (hologram screens), 11 paydata (the
+// same screens, in gold),
 // 13 way down and 14 way up (a hologram light beam: green down, white up), 15 jack-out node
 // (holographic pillar), 16 sealed doorway (security gate hologram),
 // 17 device console (Mikoshi access point), 18 network core (Cynosure brain)
 
 public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
-    if kind == 10 || kind == 12 { return 0; }
-    if kind == 11 { return 7; }
+    if kind == 10 || kind == 11 || kind == 12 { return 0; }
     if kind == 13 || kind == 14 { return 2; }
     if kind == 15 { return 3; }
     if kind == 16 { return 4; }
     if kind == 17 { return 5; }
     if kind == 18 { return 6; }
     return -1;
+}
+
+// The look each marker asks its mesh for (part of an appearance name; empty: default).
+public func RNMarkerLook(kind: Int32) -> String {
+    if kind == 11 { return "gold"; }
+    return "";
 }
 
 public func RNMarkerName(index: Int32) -> String {
@@ -587,7 +609,7 @@ public func RNMarkerName(index: Int32) -> String {
     if index == 4 { return "sealed doorway"; }
     if index == 5 { return "device console"; }
     if index == 6 { return "network core"; }
-    if index == 7 { return "paydata numbers"; }
+    if index == 7 { return "numbers (unused)"; }
     return "unknown";
 }
 
@@ -604,8 +626,7 @@ public func RNMarkerMesh(index: Int32) -> ResRef {
 
 // how far above the floor each marker floats
 public func RNMarkerLift(kind: Int32) -> Float {
-    if kind == 10 || kind == 12 { return 0.5; }
-    if kind == 11 { return 0.9; }
+    if kind == 10 || kind == 11 || kind == 12 { return 0.5; }
     if kind == 18 { return 0.8; }
     return 0.0;
 }
