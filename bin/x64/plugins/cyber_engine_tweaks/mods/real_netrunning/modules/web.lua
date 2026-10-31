@@ -153,7 +153,7 @@ local function home()
 	p:icon("Your data", "ico_data", "nc://directory")
 
 	p:heading("Top stories")
-	local news = Network.state.news
+	local news = Network.news()
 	if #news == 0 then
 		p:text("Quiet day in Night City.", YELLOW)
 	else
@@ -335,7 +335,7 @@ local function news()
 	local p = page("Newsfeed", "nc://news", RED)
 	p:banner("NEWSFEED", "Night City, as it happens", RED)
 	p:portalNav()
-	local items = Network.state.news
+	local items = Network.news()
 	if #items == 0 then p:text("Quiet day in Night City.", YELLOW) end
 	for i = #items, math.max(1, #items - 20), -1 do p:card(items[i], "", "", RED) end
 	return p
@@ -343,7 +343,7 @@ end
 
 local function netwatchPage()
 	local tier = NetWatch.tier()
-	local heat = Network.state.heat
+	local heat = Network.heat()
 	local colors = { GREEN, YELLOW, RED, RED }
 	local p = page("NetWatch", "nc://netwatch", RED)
 	p:banner("NETWATCH", "Keeping the Net safe since the DataKrash", RED)
@@ -528,9 +528,9 @@ local function companyPage(ticker, result)
 	p:portalNav()
 	status(p, result)
 	p:heading(money(Market.price(c.ticker)) .. "   " .. pct(change), up and GREEN or RED)
-	local history = Network.state.market and Network.state.market.history[c.ticker] or {}
+	local history = Market.history(c.ticker)
 	p:chart(history, up and GREEN or RED)
-	local held = Network.state.market and Network.state.market.holdings[c.ticker] or 0
+	local held = Market.held(c.ticker)
 	p:field("You hold", held .. " shares")
 	p:field("Your eddies", tostring(World.getMoney()), YELLOW)
 	p:button("Buy 1", "do://buy/" .. c.ticker .. "/1", GREEN)

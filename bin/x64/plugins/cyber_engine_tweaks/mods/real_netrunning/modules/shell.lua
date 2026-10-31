@@ -108,7 +108,7 @@ def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
 	local deck = World.cyberdeck()
 	out("Cyberdeck: " .. (deck and (deck.name .. " (" .. World.qualityName(deck) .. ")") or "none installed") ..
 		"   Deck power: " .. World.deckPower() .. "/6")
-	out("NetWatch heat: " .. Network.state.heat .. "/100 (" .. NetWatch.tierName() .. ")")
+	out("NetWatch heat: " .. Network.heat() .. "/100 (" .. NetWatch.tierName() .. ")")
 	if NetWatch.lockout > 0 then out("Deck locked out for " .. math.ceil(NetWatch.lockout) .. "s.", "err") end
 	if NetWatch.agent then out("Agent in the network: " .. NetWatch.agent.name .. " (level " .. NetWatch.agent.level .. ")", "err") end
 	if Network.jacked then out("Jacked into: " .. Network.jacked) end
@@ -618,7 +618,7 @@ def("netwatch", "netwatch [world on|off]", "Your NetWatch threat level; turn wor
 		out("NetWatch attacks in the world are now " .. args[2] .. ".", "ok")
 		return
 	end
-	local heat = Network.state.heat
+	local heat = Network.heat()
 	out("Threat level: " .. NetWatch.tierName() .. " (heat " .. heat .. "/100)", NetWatch.tier() >= 2 and "err" or "ok")
 	out("  WATCHED at 25: agents sometimes trace into networks you're in.")
 	out("  HUNTED at 50: agents come often, and NetWatch netrunners hack you in the street.")
@@ -628,7 +628,7 @@ def("netwatch", "netwatch [world on|off]", "Your NetWatch threat level; turn wor
 end)
 
 def("news", "news", "Recent events across Night City's nets.", function()
-	local news = Network.state.news
+	local news = Network.news()
 	if #news == 0 then out("Nothing new.") return end
 	for i = math.max(1, #news - 9), #news do out("  " .. news[i]) end
 end)
@@ -719,12 +719,7 @@ function Shell.update(dt)
 			end
 		end
 	end
-	-- NetWatch heat cools by 1 per minute of play
-	Shell.heatDecayTimer = Shell.heatDecayTimer + dt
-	if Shell.heatDecayTimer >= 60 then
-		Shell.heatDecayTimer = 0
-		if Network.state and Network.state.heat > 0 then Network.addHeat(-1, "cooling") end
-	end
+	-- (NetWatch heat cools in the shared core: 1 a minute, set up in Network.attachCore)
 end
 
 function Shell.setCwd(path)

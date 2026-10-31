@@ -4,6 +4,7 @@
 
 local Lore = require("modules/lore")
 local Rng = require("modules/rng")
+local Core = require("modules/core")
 
 local Network = {
 	nets = {},     -- addr -> network
@@ -272,17 +273,61 @@ end
 -- Heat and news
 ---------------------------------------------------------------------------
 
+-- NetWatch heat and the news feed are the CyberScript shared core's, so every
+-- mod sees the same: heat is the core's "netwatch" channel, news its feed.
+
+function Network.heat()
+	local c = Core.get()
+	return c and c.heat.get("netwatch") or 0
+end
+
 function Network.addHeat(amount, why)
-	local before = Network.state.heat
-	Network.state.heat = math.max(0, math.min(100, before + amount))
-	if Network.state.heat ~= before then
-		emit("netwatch.heat", { heat = Network.state.heat, change = Network.state.heat - before, why = why })
+	local c = Core.get()
+	if c == nil then return end
+	local before = c.heat.get("netwatch")
+	local after = c.heat.add("netwatch", amount, why)
+	if after ~= before then
+		emit("netwatch.heat", { heat = after, change = after - before, why = why })
 	end
 end
 
 function Network.addNews(text)
-	table.insert(Network.state.news, text)
-	while #Network.state.news > 30 do table.remove(Network.state.news, 1) end
+	local c = Core.get()
+	if c then c.news.add(text, { source = "realnetrunning" }) end
+end
+
+-- The latest n news lines (all if n is nil), oldest first.
+function Network.news(n)
+	local c = Core.get()
+	return c and c.news.texts(n) or {}
+end
+
+-- Moves heat, news and the market from saves made before the shared core into
+-- it, once per save, and adds Real Netrunning's side of the organisations.
+function Network.attachCore()
+	local c = Core.get()
+	if c == nil or Network.state == nil then return false end
+	-- each organisation's security profile (ICE, paydata, users) joins the core's entry
+	for id, profile in pairs(Lore.orgs) do
+		local def = { id = id }
+		for k, v in pairs(profile) do def[k] = v end
+		local existing = c.orgs.get(id)
+		if existing then def.name, def.kind = existing.name, existing.kind end
+		c.orgs.register(def)
+	end
+	c.heat.setDecay("netwatch", 1) -- NetWatch heat cools by 1 a minute of play
+	local s = Network.state
+	if not s.movedToCore then
+		s.movedToCore = true
+		if (s.heat or 0) > c.heat.get("netwatch") then c.heat.set("netwatch", s.heat, "moved from Real Netrunning") end
+		if s.news and #s.news > 0 and #c.news.list() == 0 then
+			for _, line in ipairs(s.news) do c.news.add(line, { source = "realnetrunning" }) end
+		end
+		local root = c.state and c.state()
+		if s.market and root and root.market == nil then root.market = s.market end
+		s.heat, s.news, s.market = 0, {}, nil
+	end
+	return true
 end
 
 ---------------------------------------------------------------------------

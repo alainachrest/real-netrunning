@@ -54,7 +54,7 @@ end
 
 -- 0 CLEAR .. 3 BURNED
 function NetWatch.tier(heat)
-	heat = heat or (Network.state and Network.state.heat or 0)
+	heat = heat or Network.heat()
 	local tier = 0
 	for i, t in ipairs(NetWatch.tiers) do
 		if heat >= t.min then tier = i - 1 end

@@ -11,7 +11,7 @@ Version 0.1.0 — first playable build.
 - redscript and Codeware 1.21 or newer, for the in-game deck
 - Optional: [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) 1.4.8 or newer, for its stores in the desktop Browser
 - Optional: [Browser Extension](https://www.nexusmods.com/cyberpunk2077/mods/10038), for other mods' sites in the desktop Browser
-- Optional: CyberScript with the extension API (`api-hooks-and-2.5` branch), for the CyberScript bridge https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5
+- CyberScript with the shared core (API 2): the [`api-hooks-and-2.5` build](https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5). Real Netrunning runs on its shared core (organisations, stock market, news, heat and standing), which the other mods share too. Without it, the deck says so and stays offline.
 
 ## Install
 
@@ -180,7 +180,7 @@ end
 
 ## Stock exchange
 
-Thirteen lore companies are listed, from Arasaka (ARA) and Militech (MIL) to Delamain (DLM). Prices move every 30 seconds of play, and every save has its own market.
+Thirteen lore companies are listed, from Arasaka (ARA) and Militech (MIL) to Delamain (DLM). Prices move every 30 seconds of play, and every save has its own market. The exchange is CyberScript's shared core, so other mods trade on the same market (and can list companies of their own), and NetWatch heat and the news feed are shared the same way.
 
 - Breaching a company's networks nudges its price down; leaking its data crashes it, and its rivals gain a little.
 - Corporate paydata sometimes carries an insider tip about news that hasn't broken yet. Trade on it before it goes public, but trading a tipped stock raises your NetWatch heat.
@@ -188,7 +188,7 @@ Thirteen lore companies are listed, from Arasaka (ARA) and Militech (MIL) to Del
 
 ## CyberScript bridge
 
-When CyberScript's extension API is installed:
+Alongside the shared core (whose own datapack actions and triggers, such as `core:add_heat` and `core:standing_above`, are documented in CyberScript):
 
 - Gang and faction score changes from datapacks (such as Gangs of Night City) show up in `news`.
 - Datapack webpages appear as sites (`web.<tag>`) you can connect to.

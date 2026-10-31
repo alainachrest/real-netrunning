@@ -6,6 +6,9 @@ Press the "Open cyberdeck" hotkey (set it in CET's Hotkeys tab) to open the deck
 the game's own UI. That needs Codeware 1.21+ and the r6/scripts/RealNetrunning files.
 The deck is also in the CET overlay as a fallback. Type 'help' in the deck.
 
+Requires CyberScript with the shared core (API 2), which holds the organisations,
+stock market, news feed and heat this mod shares with the others.
+
 Other mods: local rn = GetMod("real_netrunning") -- see rn.api below.
 ]]
 
@@ -23,6 +26,7 @@ local Market = require("modules/market")
 local Web = require("modules/web")
 local NetWatch = require("modules/netwatch")
 local Cyber = require("modules/cyberspace")
+local Core = require("modules/core")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -73,6 +77,10 @@ local function migrate(state)
 	end
 end
 
+-- The world runs on CyberScript's shared core, which loads its own part of the
+-- save at the same moment; so Real Netrunning waits a moment for it.
+RealNetrunning.coreWait = nil
+
 local function startWorld()
 	migrate(Persisted)
 	Network.state = Persisted
@@ -82,6 +90,22 @@ local function startWorld()
 	Cyber.onSessionStart()
 	Bridge.onWorldRebuilt()
 	Native.onWorldRebuilt()
+	RealNetrunning.ready = false
+	RealNetrunning.coreWait = 2.0
+end
+
+-- Called once the wait is over: finds the core and goes online (or explains why not).
+local function attachCore()
+	RealNetrunning.coreWait = nil
+	if Core.get() == nil then
+		RealNetrunning.ready = false
+		log(Core.missing)
+		Shell.print(Core.missing, "err")
+		World.warn("Real Netrunning needs CyberScript")
+		return
+	end
+	Network.attachCore()
+	Market.attach(Bus)
 	RealNetrunning.ready = true
 	Shell.print("Cyberdeck online. Type 'help' to start, 'scan' to find networks.", "ok")
 end
@@ -134,6 +158,10 @@ registerForEvent("onInit", function()
 end)
 
 registerForEvent("onUpdate", function(dt)
+	if RealNetrunning.coreWait then
+		RealNetrunning.coreWait = RealNetrunning.coreWait - dt
+		if RealNetrunning.coreWait <= 0 then attachCore() end
+	end
 	Bridge.update(dt)
 	if RealNetrunning.ready then
 		Native.update(dt)
@@ -196,7 +224,7 @@ RealNetrunning.api = {
 	on = Bus.on,
 	off = Bus.off,
 	emit = Bus.emit,
-	getHeat = function() return Network.state and Network.state.heat or 0 end,
+	getHeat = function() return Network.heat() end,
 	addHeat = function(amount, why) if Network.state then Network.addHeat(amount, why) end end,
 	isOwned = function(addr) return Network.state ~= nil and Network.isOwned(addr) end,
 	reveal = function(addr) return Network.state ~= nil and Network.reveal(addr, "api") end,

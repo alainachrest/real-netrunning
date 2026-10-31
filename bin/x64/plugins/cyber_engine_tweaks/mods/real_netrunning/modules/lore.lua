@@ -483,7 +483,17 @@ function Lore.region(id)
 	return Lore.regions[id or "nc"] or Lore.regions.nc
 end
 
+-- An organisation: the CyberScript shared core's entry (shared with the other
+-- mods, which can add their own) with Real Netrunning's security profile on it.
 function Lore.getOrg(id)
+	local core = require("modules/core").get()
+	local org = core and core.orgs.get(id)
+	if org and org.ice and org.paydata and org.users then return org end
+	if org and Lore.orgs[id] == nil then
+		-- an organisation another mod added: secure like a mid-size corp
+		local base = Lore.orgs[org.kind == "gang" and "maelstrom" or "kangtao"]
+		return setmetatable({ name = org.name, kind = org.kind }, { __index = base })
+	end
 	return Lore.orgs[id] or Lore.orgs.unregistered
 end
 

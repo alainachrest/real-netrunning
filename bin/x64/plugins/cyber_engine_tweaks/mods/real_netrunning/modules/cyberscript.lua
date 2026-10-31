@@ -92,13 +92,13 @@ local function registerExtensions()
 		return Network.isOwned(tostring(trigger.address or trigger.value))
 	end, "Real Netrunning")
 	api.registerTrigger(VAR_TAG .. ":heat_above", function(trigger)
-		return Network.state.heat > (tonumber(trigger.value) or 0)
+		return Network.heat() > (tonumber(trigger.value) or 0)
 	end, "Real Netrunning")
 end
 
 local function pushVariables()
 	if not Bridge.connected or Network.state == nil then return end
-	pcall(Bridge.api.setVariable, VAR_TAG, "heat", Network.state.heat)
+	pcall(Bridge.api.setVariable, VAR_TAG, "heat", Network.heat())
 	local count = 0
 	for _ in pairs(Network.state.owned) do count = count + 1 end
 	pcall(Bridge.api.setVariable, VAR_TAG, "breaches", count)

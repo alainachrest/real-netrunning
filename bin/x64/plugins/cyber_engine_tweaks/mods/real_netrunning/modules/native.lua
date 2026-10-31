@@ -115,7 +115,7 @@ local function statusText()
 	local net = Shell.connected and Network.get(Shell.connected)
 	local parts = {
 		"DECK POWER " .. World.deckPower(),
-		"NETWATCH HEAT " .. (Network.state and Network.state.heat or 0) .. "/100",
+		"NETWATCH HEAT " .. Network.heat() .. "/100",
 	}
 	if net then
 		table.insert(parts, "CONNECTED " .. net.name:upper() .. "  ICE " .. net.ice ..
@@ -338,7 +338,7 @@ function Native.update(dt)
 	Native.refreshTimer = 0
 
 	-- desktop trays show heat whether or not the deck popup is open
-	local heat = Network.state and Network.state.heat or 0
+	local heat = Network.heat()
 	if heat ~= Native.last.heat then
 		Native.last.heat = heat
 		call(function() svc:SetHeat(heat) end)
