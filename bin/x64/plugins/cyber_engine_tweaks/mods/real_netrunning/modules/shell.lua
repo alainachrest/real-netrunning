@@ -187,6 +187,10 @@ def("cyber", "cyber [scan|debug]", "Where you are in cyberspace. 'cyber scan' ma
 		out(text, ok and "out" or "err")
 		return
 	end
+	if args[1] == "effects" then
+		out("V's effects: " .. tostring(World.playerEffects()))
+		return
+	end
 	if args[1] == "debug" then
 		out(Shell.cyber.active and Shell.cyber.debug() or ("Last jack-in:\n" .. tostring(Shell.cyber.lastDebug or "none yet")))
 		return

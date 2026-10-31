@@ -425,6 +425,41 @@ function World.setHudSettings(values)
 	end)
 end
 
+-- The names of the visual effects V's own entity can play (from V's entity
+-- template), for finding a jack-in effect. The template loads in the
+-- background: returns the list once it's in, otherwise a note to try again.
+function World.playerEffects()
+	if World.effectsToken == nil then
+		local ok, err = pcall(function()
+			local path = Game.GetPlayer():GetTemplatePath()
+			World.effectsPath = tostring(path)
+			World.effectsToken = Game.GetResourceDepot():LoadResource(path)
+		end)
+		if not ok then return "couldn't look up V's template: " .. tostring(err) end
+		return "loading V's template... run 'cyber debug' again"
+	end
+	local ok, result = pcall(function()
+		local token = World.effectsToken
+		if token:IsFailed() then return "V's template failed to load" end
+		if not token:IsLoaded() then return "still loading V's template... run 'cyber debug' again" end
+		local template = token:GetResource()
+		local names = {}
+		for _, desc in ipairs(template.effects or {}) do
+			local name = desc.effectName
+			local ok2, text = pcall(function() return name.value end)
+			table.insert(names, ok2 and text and tostring(text) or tostring(name))
+		end
+		if #names == 0 then return "no effects on V's template" end
+		table.sort(names)
+		return table.concat(names, ", ")
+	end)
+	if not ok then
+		World.effectsToken = nil
+		return "couldn't read V's effects: " .. tostring(result)
+	end
+	return result
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

@@ -1571,6 +1571,7 @@ function Cyber.debug()
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
 		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
 		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/8")
+	table.insert(lines, "V's effects: " .. tostring(World.playerEffects()))
 	local looks = World.cyberCall("MarkerAppearances")
 	if type(looks) == "string" and looks ~= "" then
 		table.insert(lines, "hologram looks:")
