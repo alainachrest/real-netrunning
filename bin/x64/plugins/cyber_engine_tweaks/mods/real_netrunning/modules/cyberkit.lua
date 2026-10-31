@@ -102,7 +102,7 @@ Kit.scanRange = 3            -- how many rooms (through doorways) a scan reaches
 -- pool of coloured light (Cyberspace.reds, RNMarker*). Block kinds:
 Kit.markers = { file = 10, paydata = 11, taken = 12, down = 13, up = 14, exit = 15, gate = 16, console = 17, core = 18 }
 -- how big each one is, in metres
-Kit.markerSize = { [10] = 1.2, [11] = 1.2, [12] = 0.9, [13] = 4.5, [14] = 4.0, [15] = 3.0, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
+Kit.markerSize = { [10] = 1.2, [11] = 1.2, [12] = 0.9, [13] = 3.5, [14] = 4.0, [15] = 3.0, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
 -- cyberspace particles in every room (1), every other room (2), or none (0)
 Kit.particleRooms = 1
 
