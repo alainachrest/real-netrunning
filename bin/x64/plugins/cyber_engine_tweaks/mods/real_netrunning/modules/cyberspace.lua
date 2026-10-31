@@ -1451,6 +1451,11 @@ function Cyber.debug()
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
 		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
 		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/8")
+	local looks = World.cyberCall("MarkerAppearances")
+	if type(looks) == "string" and looks ~= "" then
+		table.insert(lines, "hologram looks:")
+		table.insert(lines, looks)
+	end
 	local failed = {}
 	for name in pairs(Cyber.failedProps or {}) do table.insert(failed, name) end
 	if #failed > 0 then table.insert(lines, "props that didn't spawn: " .. table.concat(failed, ", ")) end

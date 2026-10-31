@@ -24,6 +24,7 @@ public class RNMeshFit {
     public let min: Vector4;
     public let max: Vector4;
     public let token: ref<ResourceToken>;
+    public let appearances: String; // the mesh's appearance names, for 'cyber debug'
 }
 
 public class RNCyberspaceSystem extends ScriptableSystem {
@@ -88,6 +89,13 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         if IsDefined(fit) && IsDefined(mesh) {
             fit.min = mesh.boundingBox.Min;
             fit.max = mesh.boundingBox.Max;
+            let names = "";
+            for appearance in mesh.appearances {
+                if IsDefined(appearance) {
+                    names += (StrLen(names) > 0 ? ", " : "") + NameToString(appearance.name);
+                }
+            }
+            fit.appearances = names;
             fit.ready = true;
         }
     }
@@ -263,6 +271,24 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         if kind == 10 || kind == 11 {
             template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), 4.0, lumens * 0.6, 0.4));
         }
+    }
+
+    // For 'cyber debug': each marker mesh and the appearances (looks) it comes in.
+    public func MarkerAppearances() -> String {
+        let text = "";
+        let i = 0;
+        while i < ArraySize(this.m_markerFits) {
+            let fit = this.m_markerFits[i];
+            let line = "hologram " + IntToString(i) + " (" + RNMarkerName(i) + "): ";
+            if IsDefined(fit) && fit.ready {
+                line += StrLen(fit.appearances) > 0 ? fit.appearances : "(no appearances listed)";
+            } else {
+                line += "not loaded";
+            }
+            text += (StrLen(text) > 0 ? "\n" : "") + line;
+            i += 1;
+        }
+        return text;
     }
 
     // For 'cyber debug': how many marker meshes have loaded.
@@ -551,6 +577,18 @@ public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
     if kind == 17 { return 5; }
     if kind == 18 { return 6; }
     return -1;
+}
+
+public func RNMarkerName(index: Int32) -> String {
+    if index == 0 { return "data screens"; }
+    if index == 1 { return "unused"; }
+    if index == 2 { return "ways up and down"; }
+    if index == 3 { return "jack-out pillar"; }
+    if index == 4 { return "sealed doorway"; }
+    if index == 5 { return "device console"; }
+    if index == 6 { return "network core"; }
+    if index == 7 { return "paydata numbers"; }
+    return "unknown";
 }
 
 public func RNMarkerMesh(index: Int32) -> ResRef {
