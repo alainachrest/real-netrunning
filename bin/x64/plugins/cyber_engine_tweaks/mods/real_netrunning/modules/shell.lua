@@ -547,7 +547,6 @@ def("nearby", "nearby", "List the device networks around you: every device is on
 		out(string.format("  %-26s ICE %d  %-8s %s (%d here)", net.addr, net.ice, net.isolated and "ISOLATED" or "ONLINE",
 			net.name, row.count), Network.isOwned(net.addr) and "ok" or (net.isolated and "err" or "out"))
 	end
-	out("Online networks can be reached from anywhere now. Isolated ones only by jacking into one of their devices.")
 	emit("hack.nearby", { networks = #list, devices = total })
 end)
 
