@@ -558,6 +558,11 @@ function World.watchParticleBlocks(kind, path)
 	end)
 end
 
+-- True while the game is paused (pause menu and the like).
+function World.isPaused()
+	return try(function() return Game.GetSystemRequestsHandler():IsGamePaused() end) == true
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

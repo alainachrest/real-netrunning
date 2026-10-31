@@ -137,10 +137,13 @@ registerForEvent("onUpdate", function(dt)
 	Bridge.update(dt)
 	if RealNetrunning.ready then
 		Native.update(dt)
-		Shell.update(dt)
-		NetWatch.update(dt, Shell.connected)
-		Market.update(dt)
-		Cyber.update(dt)
+		-- nothing moves on while the game is paused (CET keeps updating in menus)
+		if not World.isPaused() then
+			Shell.update(dt)
+			NetWatch.update(dt, Shell.connected)
+			Market.update(dt)
+			Cyber.update(dt)
+		end
 	end
 end)
 
