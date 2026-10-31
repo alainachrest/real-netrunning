@@ -69,6 +69,7 @@ function Territory.state()
 	t.defense = t.defense or {}   -- addr -> { ice, guard = { kind, power, name, untilClock } } for V's networks
 	t.attacks = t.attacks or {}   -- addr -> { attacker, power, left, raid, holder, id, helped }
 	t.taken = t.taken or {}       -- addr -> the org V took it from
+	t.since = t.since or {}       -- addr -> clock when it last changed hands
 	t.clock = t.clock or 0        -- seconds of play
 	return t
 end
@@ -170,7 +171,7 @@ end
 local function standing(org, amount, why)
 	local c = Core.get()
 	if c == nil or org == nil or org == "player" then return end
-	if not FACTION_KINDS[Lore.getOrg(org).kind] and Lore.getOrg(org).kind ~= "media" then return end
+	if not FACTION_KINDS[Lore.getOrg(org).kind] and Lore.getOrg(org).kind ~= "media" and org ~= "netwatch" then return end
 	c.standing.change(org, amount, why)
 end
 
@@ -192,14 +193,22 @@ local function transfer(addr, to, from)
 		t.defense[addr] = nil
 		t.taken[addr] = nil
 		World.warn(net.name .. " lost to " .. Territory.holderName(to))
-		out(Territory.holderName(to) .. " took " .. net.name .. " (" .. addr .. ") from you. You'll have to breach it again from the lobby.", "err")
-		Network.addNews(Territory.holderName(to) .. " netrunners seize " .. net.name .. " back from an unknown intruder")
+		local whoTook = to == "rogueai" and "A rogue AI" or Territory.holderName(to)
+		out(whoTook .. " took " .. net.name .. " (" .. addr .. ") from you. You'll have to breach it again from the lobby.", "err")
+		Network.addNews(to == "rogueai" and ("Something from beyond the Blackwall has taken over " .. net.name)
+			or to == "netwatch" and ("NetWatch seizes " .. net.name .. " from an unknown netrunner")
+			or (Territory.holderName(to) .. " netrunners seize " .. net.name .. " back from an unknown intruder"))
+	elseif to == "rogueai" then
+		Network.addNews("Something from beyond the Blackwall has taken over " .. net.name .. ". " .. Territory.holderName(from) .. " lost all contact.")
+	elseif to == "netwatch" then
+		Network.addNews("NetWatch quarantines " .. net.name .. (from == "rogueai" and " after purging a rogue AI" or (", seized from " .. Territory.holderName(from))))
 	else
 		Network.addNews(Territory.holderName(to) .. " netrunners seize " .. net.name .. " from " .. Territory.holderName(from))
 	end
 	-- the new holder rebuilds the ICE: any way V had in is gone
 	Network.state.depth[addr] = nil
 	t.control[addr] = (to ~= net.org) and to or nil
+	t.since[addr] = t.clock
 	emit("territory.taken", { addr = addr, to = to, from = from })
 	local c = Core.get()
 	if c and c.emit then pcall(c.emit, "network.taken", { addr = addr, to = to, from = from, by = "realnetrunning" }) end
@@ -296,6 +305,15 @@ function Territory.worldTick()
 	local active = 0
 	for _, a in pairs(t.attacks) do if not a.raid then active = active + 1 end end
 	if active >= Territory.worldMax then return nil end
+	-- now and then it's NetWatch or a rogue AI; an AI that's already loose
+	-- spreads faster, and NetWatch comes down hard on networks an AI holds
+	local counts = Territory.counts()
+	local ai = counts.rogueai or 0
+	local r = roll()
+	local special
+	if r < 0.04 + 0.03 * math.min(ai, 5) then special = "rogueai"
+	elseif r < 0.12 + 0.03 * math.min(ai, 5) + 0.04 * math.min(ai, 5) then special = "netwatch" end
+	if special then return Territory.specialTick(special) end
 	local factions = Territory.factions()
 	if #factions == 0 then return nil end
 	local attacker = factions[rint(1, #factions)]
@@ -319,6 +337,48 @@ function Territory.worldTick()
 	local pick = weightedPick(options)
 	if pick == nil then return nil end
 	return pick.addr, startAttack(pick.addr, attacker, false)
+end
+
+-- NetWatch quarantines networks (rogue AI first, then gang networks); a rogue AI
+-- takes anything, big corporate networks most of all, anywhere in the world.
+function Territory.specialTick(attacker)
+	local t = Territory.state()
+	local options = {}
+	for _, addr in ipairs(Network.order) do
+		local net = Network.get(addr)
+		local holder = Territory.holder(addr)
+		if Territory.contestable(net) and holder ~= attacker and holder ~= "player" and t.attacks[addr] == nil
+			and not Territory.busy(addr) then
+			local hk = Lore.getOrg(holder).kind
+			local w
+			if attacker == "netwatch" then
+				w = (holder == "rogueai" and 20) or (hk == "gang" and 1) or (hk == "civilian" and 0.2) or 0.1
+			else
+				w = ((hk == "corp" or hk == "media") and 1.5) or 1
+				if holder == "netwatch" then w = 0.3 end
+			end
+			table.insert(options, { addr = addr, w = w })
+		end
+	end
+	local pick = weightedPick(options)
+	if pick == nil then return nil end
+	return pick.addr, startAttack(pick.addr, attacker, false)
+end
+
+-- NetWatch hands quarantined networks back to their operators after a while.
+Territory.quarantine = 4 * 3600
+local function releaseQuarantines()
+	local t = Territory.state()
+	for addr, holder in pairs(t.control) do
+		local since = t.since[addr] or t.clock
+		if holder == "netwatch" and t.clock - since >= Territory.quarantine and t.attacks[addr] == nil then
+			local net = Network.get(addr)
+			t.control[addr] = nil
+			Network.state.depth[addr] = nil
+			if net then Network.addNews("NetWatch lifts its quarantine on " .. net.name .. ", handing it back to " .. Territory.holderName(net.org)) end
+			emit("territory.taken", { addr = addr, to = net and net.org, from = "netwatch" })
+		end
+	end
 end
 
 ---------------------------------------------------------------------------
@@ -346,7 +406,8 @@ function Territory.startRaid(addr)
 	local net = options[rint(1, #options)]
 	-- whoever V took it from wants it back; otherwise the factions V has crossed most
 	local attacker = t.taken[net.addr]
-	if attacker == nil or not FACTION_KINDS[Lore.getOrg(attacker).kind] or roll() >= 0.6 then
+	local avenger = attacker and (FACTION_KINDS[Lore.getOrg(attacker).kind] or attacker == "netwatch" or attacker == "rogueai")
+	if not avenger or roll() >= 0.6 then
 		local list = {}
 		for _, id in ipairs(Territory.factions()) do
 			local o = Lore.getOrg(id)
@@ -354,6 +415,9 @@ function Territory.startRaid(addr)
 				table.insert(list, { id = id, w = 1 + math.max(0, -standingOf(id)) / 10 })
 			end
 		end
+		-- NetWatch comes for V's networks the hotter V is; a rogue AI, rarely, for anyone's
+		table.insert(list, { id = "netwatch", w = Network.heat() / 15 })
+		table.insert(list, { id = "rogueai", w = 0.3 })
 		local pick = weightedPick(list)
 		attacker = pick and pick.id or attacker
 	end
@@ -361,8 +425,9 @@ function Territory.startRaid(addr)
 	local a = startAttack(net.addr, attacker, true)
 	local who = Territory.holderName(attacker)
 	World.warn(who .. " are attacking " .. net.name)
-	out(string.format("RAID: %s netrunners are attacking %s (%s). You have %d minutes. 'defend' from the deck, jack in and fight them, or trust your ICE (%d) and guards.",
-		who, net.name, net.addr, math.floor(Territory.raidWindow / 60), Territory.defense(net.addr)), "err")
+	local who2 = attacker == "rogueai" and "A rogue AI is" or attacker == "netwatch" and "NetWatch agents are" or (who .. " netrunners are")
+	out(string.format("RAID: %s attacking %s (%s). You have %d minutes. 'defend' from the deck, jack in and fight them, or trust your ICE (%d) and guards.",
+		who2, net.name, net.addr, math.floor(Territory.raidWindow / 60), Territory.defense(net.addr)), "err")
 	return net.addr, a
 end
 
@@ -440,7 +505,15 @@ function Territory.onBreached(e)
 		t.attacks[e.addr] = nil
 	end
 	local org = Lore.getOrg(from)
-	if FACTION_KINDS[org.kind] or org.kind == "media" then
+	if from == "netwatch" then
+		standing("netwatch", -(4 + net.tier), "V broke a NetWatch quarantine on " .. e.addr)
+		Network.addHeat(10, "broke a NetWatch quarantine on " .. e.addr)
+		out("You broke NetWatch's quarantine on " .. net.name .. ". They'll want it back, and you.", "err")
+	elseif from == "rogueai" then
+		standing("netwatch", 2, "V purged a rogue AI from " .. e.addr)
+		Network.addNews("Unknown netrunner purges a rogue AI from " .. net.name)
+		out("You've torn the rogue AI out of " .. net.name .. ". Whatever's left of it may try to come back.", "ok")
+	elseif FACTION_KINDS[org.kind] or org.kind == "media" then
 		standing(from, -(2 + net.tier), "V took " .. e.addr)
 		for _, r in ipairs(Territory.rivals[from] or {}) do standing(r, 1, "V hit their rival " .. from) end
 		out(org.name .. " won't forget you took " .. net.name .. ". Expect them to come for it.", "warn")
@@ -472,6 +545,7 @@ function Territory.update(dt)
 		Territory.worldTick()
 	end
 	Territory.raidTick()
+	releaseQuarantines()
 
 	Territory.guardTimer = Territory.guardTimer + dt
 	local guardTurn = Territory.guardTimer >= Territory.guardEvery

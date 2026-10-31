@@ -1127,12 +1127,17 @@ local function spawnPatrols(i)
 	if floor == nil or floor.patrolled or net == nil then return end
 	floor.patrolled = true
 	if net.ice <= 0 or Network.isOwned(net.addr) or Cyber.bodySafe then return end
-	local org = Lore.getOrg(net.org)
+	-- whoever holds the network now runs its ICE (modules/territory)
+	local holder = Territory.holder(net.addr) or net.org
+	local org = Lore.getOrg(holder)
 	local count = 1
 	if net.ice >= 5 or floor.layout.w * floor.layout.h >= 36 then count = 2 end
 	if net.ice >= 8 then count = 3 end
 	for _ = 1, count do
-		addHunter("patrol", Kit.iceRecord(net.org, org, false), i, farRoom(i, 3, true))
+		local record = Kit.iceRecord(holder, org, false)
+		if holder == "rogueai" then record = Kit.rogueAI[math.floor(roll() * #Kit.rogueAI) + 1] or Kit.rogueAI[1]
+		elseif holder == "netwatch" then record = Kit.netwatch end
+		addHunter("patrol", record, i, farRoom(i, 3, true))
 	end
 end
 
@@ -1281,6 +1286,7 @@ local function rollEncounter(dt)
 	if floor == nil or floor.layout == nil then return last("none: floor not built") end
 	local r = roll()
 	local rogueChance = 0.03 + 0.02 * tier + (Cyber.floor >= Kit.deepFloor and 0.03 or 0)
+	if here and Territory.holder(here.addr) == "rogueai" then rogueChance = rogueChance + 0.3 end -- its home now
 	local rivalChance = 0.12 + 0.03 * tier
 	local kind
 	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance and not cutOff then kind = "rival"
@@ -1331,16 +1337,20 @@ local function updateRaid(dt)
 		local org = Lore.getOrg(a.attacker)
 		local count = math.max(1, math.min(3, math.ceil(a.power / 3)))
 		local spawned = 0
+		local who = a.attacker == "rogueai" and "The rogue AI's constructs" or a.attacker == "netwatch" and "NetWatch agents"
+			or (org.name .. " netrunners")
 		for _ = 1, count do
-			if addHunter("raider", Kit.iceRecord(a.attacker, org, false), Cyber.floor, farRoom(Cyber.floor, 2, false),
-				{ name = org.name .. " netrunner" }) then spawned = spawned + 1 end
+			local record, name = Kit.iceRecord(a.attacker, org, false), org.name .. " netrunner"
+			if a.attacker == "rogueai" then record, name = Kit.rogueAI[math.floor(roll() * #Kit.rogueAI) + 1] or Kit.rogueAI[1], "a rogue AI construct"
+			elseif a.attacker == "netwatch" then record, name = Kit.netwatch, "a NetWatch agent" end
+			if addHunter("raider", record, Cyber.floor, farRoom(Cyber.floor, 2, false), { name = name }) then spawned = spawned + 1 end
 		end
 		if spawned > 0 then
 			if a.raid then
-				say(org.name .. " netrunners are in your network, fighting for it. Derezz them.", "err")
-				World.warn(org.name .. " raiders")
+				say(who .. " are in your network, fighting for it. Derezz them.", "err")
+				World.warn(a.attacker == "rogueai" and "Rogue AI in your network" or (org.name .. " raiders"))
 			elseif Cyber.raidWave == nil then
-				say(org.name .. " netrunners are fighting " .. Territory.holderName(a.holder) ..
+				say(who .. " are fighting " .. Territory.holderName(a.holder) ..
 					" for this network. Hit them and you help the defenders.", "warn")
 			end
 		end

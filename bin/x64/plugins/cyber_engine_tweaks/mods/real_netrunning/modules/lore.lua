@@ -50,6 +50,12 @@ Lore.orgs = {
 	esa         = { name = "European Space Agency", kind = "corp", ice = { 4, 5 }, paydata = { 1000, 2600 },
 		users = { "habitat_ops", "docking", "lifesupport", "e.lindqvist", "medbay" }, tone = "orbital" },
 
+	-- they take networks too (modules/territory)
+	netwatch    = { name = "NetWatch",         kind = "city", ice = { 5, 6 }, paydata = { 400, 1200 },
+		users = { "agent_7", "quarantine", "forensics", "k.bryce", "sweep" }, tone = "police" },
+	rogueai     = { name = "a rogue AI",       kind = "ai", ice = { 5, 6 }, paydata = { 0, 900 },
+		users = { "[unknown]" }, tone = "abandoned" },
+
 	-- the junk of the Net: shops, bars, clinics, flats, vending machines
 	civilian    = { name = "Independent",      kind = "civilian", ice = { 0, 1 }, paydata = { 20, 120 },
 		users = { "owner", "staff", "admin" }, tone = "shop" },
