@@ -519,14 +519,13 @@ public func RNLightColour(i: Int32) -> Color {
 
 // --- markers -------------------------------------------------------------------------
 // kind 10 data, 11 paydata, 12 data already taken (a hologram of numbers),
-// 13 way down (the glowing ring from summoning a car, on the floor), 14 way up (light beam), 15 jack-out node
+// 13 way down and 14 way up (a hologram light beam: green down, white up), 15 jack-out node
 // (holographic pillar), 16 sealed doorway (security gate hologram),
 // 17 device console (Mikoshi access point), 18 network core (Cynosure brain)
 
 public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
     if kind == 10 || kind == 11 || kind == 12 { return 0; }
-    if kind == 13 { return 1; }
-    if kind == 14 { return 2; }
+    if kind == 13 || kind == 14 { return 2; }
     if kind == 15 { return 3; }
     if kind == 16 { return 4; }
     if kind == 17 { return 5; }
@@ -548,7 +547,6 @@ public func RNMarkerMesh(index: Int32) -> ResRef {
 public func RNMarkerLift(kind: Int32) -> Float {
     if kind == 10 || kind == 11 || kind == 12 { return 0.9; }
     if kind == 18 { return 0.8; }
-    if kind == 13 { return 0.03; }
     return 0.0;
 }
 
