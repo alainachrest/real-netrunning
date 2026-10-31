@@ -94,6 +94,20 @@ Kit.rogueAI = {
 	"Character.boxingrobot_hard",
 }
 
+-- The quickhacks cyberspace's fighters upload into V while they're close (in
+-- V's room or the next one through a doorway). Each shows an upload warning
+-- first; take the hacker down before it finishes and nothing happens.
+--   damage: percent of V's max health   trace: added to V's trace
+--   effect: a status effect put on V for its look (if the game has it)
+Kit.enemyHacks = {
+	{ name = "Overheat",          upload = 3.0, damage = 6,  burn = 3, effect = "BaseStatusEffect.Burning" },
+	{ name = "Short Circuit",     upload = 2.0, damage = 10, effect = "BaseStatusEffect.Electrocuted" },
+	{ name = "Trace Ping",        upload = 2.0, trace = 10 },
+	{ name = "Synapse Burnout",   upload = 4.0, damage = 18, elite = true },
+}
+Kit.hackEvery = { 9, 15 }    -- seconds between a fighter's hacks (elites a third faster)
+Kit.hackRange = 1            -- rooms away a fighter can hack V from
+
 -- How cyberspace pushes back
 Kit.encounterEvery = 30      -- seconds between rolls for a rival or rogue AI
 Kit.encounterMax = 2         -- at most this many at once

@@ -558,7 +558,9 @@ local function clear()
 	for i in pairs(Cyber.floors) do unbuildFloor(i) end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
 	Cyber.clearHunters()
-	Cyber.armory = {}
+	Cyber.armory, Cyber.hackers, Cyber.burning = {}, {}, nil
+	for _, e in ipairs(Cyber.hackEffects or {}) do World.removeStatusEffect(e.effect) end
+	Cyber.hackEffects = {}
 	World.cyberCall("ForgetBlocks")
 	Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC = {}, {}, {}, nil
 end
@@ -1251,12 +1253,128 @@ local function updateAgent()
 	Cyber.agentNPC = mine and not mine.gone and mine.id or nil
 end
 
+---------------------------------------------------------------------------
+-- Enemy quickhacks
+---------------------------------------------------------------------------
+--
+-- The fighters in cyberspace are brawlers, so the hacking is done here:
+-- every fighter close to V uploads a quickhack now and then, with a warning
+-- while it uploads. Killing it first cancels the hack.
+
+Cyber.hackers = {}
+
+local function isElite(record)
+	return tostring(record):find("elite", 1, true) ~= nil or tostring(record):find("boxingrobot", 1, true) ~= nil
+end
+
+local function pickHack(elite)
+	local options = {}
+	for _, h in ipairs(Kit.enemyHacks) do
+		if elite or not h.elite then table.insert(options, h) end
+	end
+	return options[math.floor(roll() * #options) + 1] or options[1]
+end
+
+local function landHack(hack, who)
+	if hack.damage then World.damagePlayer(hack.damage) end
+	if hack.trace then Cyber.addTrace(hack.trace) end
+	if hack.effect then
+		World.applyStatusEffect(hack.effect)
+		table.insert(Cyber.hackEffects, { effect = hack.effect, timer = hack.burn or 1.5 })
+	end
+	if hack.burn then Cyber.burning = { left = hack.burn, perSecond = hack.damage / hack.burn } end
+	say(who .. "'s " .. hack.name .. " hits you.", "err")
+end
+
+-- Every fighter on V's floor: { id, record, name }
+local function fighters()
+	local list = {}
+	local floor = Cyber.floors[Cyber.floor]
+	if floor == nil then return list end
+	local net = Network.get(Cyber.addr)
+	local org = net and Lore.getOrg(net.org)
+	for _, id in ipairs(floor.ice) do
+		table.insert(list, { id = id, record = org and Kit.iceRecord(net.org, org, false) or "", name = "ICE" })
+	end
+	for _, h in ipairs(Cyber.hunters) do
+		if not h.gone and h.id and h.floor == Cyber.floor then
+			local names = { patrol = "Patrol ICE", rival = "The rival netrunner", rogue = "The rogue AI", agent = "NetWatch" }
+			table.insert(list, { id = h.id, record = h.record, name = names[h.kind] or "Something" })
+		end
+	end
+	return list
+end
+
+local function updateEnemyHacks(dt, here)
+	Cyber.hackEffects = Cyber.hackEffects or {}
+	-- effects wearing off
+	local kept = {}
+	for _, e in ipairs(Cyber.hackEffects) do
+		e.timer = e.timer - dt
+		if e.timer <= 0 then World.removeStatusEffect(e.effect) else table.insert(kept, e) end
+	end
+	Cyber.hackEffects = kept
+	-- Overheat keeps burning for a few seconds
+	if Cyber.burning then
+		local step = math.min(dt, Cyber.burning.left)
+		World.damagePlayer(Cyber.burning.perSecond * step)
+		Cyber.burning.left = Cyber.burning.left - step
+		if Cyber.burning.left <= 0 then Cyber.burning = nil end
+	end
+
+	local floor = Cyber.floors[Cyber.floor]
+	local L = floor and floor.layout
+	if L == nil or here == nil then return end
+	local dist = distances(L, here)
+	local alive = {}
+	for _, f in ipairs(fighters()) do
+		alive[f.id] = true
+		local s = Cyber.hackers[f.id]
+		local elite = isElite(f.record)
+		if s == nil then
+			s = { cool = Kit.hackEvery[1] * 0.5 + roll() * 4 }
+			Cyber.hackers[f.id] = s
+		end
+		local dead = World.npcDead(f.id)
+		local p = dead == false and World.npcPosition(f.id)
+		local room = p and roomAt(Cyber.floor, p.x, p.y)
+		local close = room and (dist[cellId(room)] or 99) <= Kit.hackRange
+		if dead ~= false then
+			if s.upload then say(f.name .. "'s upload dies with it.", "ok") end
+			s.upload = nil
+		elseif s.upload then
+			s.upload.left = s.upload.left - dt
+			if s.upload.left <= 0 then
+				local hack = s.upload.hack
+				s.upload = nil
+				if close then landHack(hack, f.name) else say(f.name .. "'s " .. hack.name .. " loses you.", "ok") end
+				if not Cyber.active then return end
+			end
+		elseif close then
+			s.cool = s.cool - dt
+			if s.cool <= 0 then
+				local hack = pickHack(elite)
+				s.upload = { hack = hack, left = hack.upload }
+				local every = Kit.hackEvery[1] + roll() * (Kit.hackEvery[2] - Kit.hackEvery[1])
+				s.cool = elite and every * 0.66 or every
+				World.warn("QUICKHACK UPLOAD: " .. hack.name .. " (" .. math.floor(hack.upload) .. "s)")
+				say(f.name .. " is uploading " .. hack.name .. " into you. Take it down!", "warn")
+				emit("cyber.enemy_hack", { addr = Cyber.addr, hack = hack.name })
+			end
+		end
+	end
+	for id in pairs(Cyber.hackers) do if not alive[id] then Cyber.hackers[id] = nil end end
+end
+Cyber.updateEnemyHacks = updateEnemyHacks
+
 local function updateHunters(dt)
 	spawnPatrols(Cyber.floor)
 	updateAgent()
 	rollEncounter(dt)
 	local here = vRoom()
 	for _, h in ipairs(Cyber.hunters) do updateHunter(h, dt, here) end
+	updateEnemyHacks(dt, here)
+	if not Cyber.active then return end
 	local kept = {}
 	for _, h in ipairs(Cyber.hunters) do if not h.gone then table.insert(kept, h) end end
 	Cyber.hunters = kept

@@ -364,6 +364,16 @@ function World.healthPercent()
 	return type(value) == "number" and value or 100
 end
 
+-- Takes a share of V's health (percent of the maximum), as a hack would.
+function World.damagePlayer(percent)
+	return try(function()
+		local player = Game.GetPlayer()
+		Game.GetStatPoolsSystem():RequestChangingStatPoolValue(player:GetEntityID(), gamedataStatPoolType.Health,
+			-math.abs(percent), player, false, true)
+		return true
+	end)
+end
+
 function World.inCombat()
 	return try(function() return Game.GetPlayer():IsInCombat() end) == true
 end
