@@ -535,7 +535,9 @@ end
 -- cyberspace block through RNEntityHooks; this observes it), through Codeware's
 -- ResourceHelper, the way World Builder adds particles.
 World.particlesAdded, World.particleError, World.particleSeen = 0, nil, 0
-function World.watchParticleBlocks(kind, path)
+World.particleFor = {}  -- entity hash -> the name of the particles it was given
+-- systems: { { name, path } }; rooms take turns through them
+function World.watchParticleBlocks(kind, systems)
 	return try(function()
 		Observe("RNEntityHooks", "OnEntityInitialize", function(_, event)
 			World.particleSeen = World.particleSeen + 1
@@ -545,9 +547,11 @@ function World.watchParticleBlocks(kind, path)
 				-- particle blocks carry a component with this name (Cyberspace.reds)
 				if entity:FindComponentByName("rn_particles_here") == nil then return end
 				World.particleBlocks = (World.particleBlocks or 0) + 1
+				local pick = systems[(World.particleBlocks - 1) % #systems + 1]
+				World.particleFor[tostring(entity:GetEntityID().hash)] = pick.name
 				local component = entParticlesComponent.new()
 				component.name = "rn_particles"
-				ResourceHelper.LoadReferenceResource(component, "particleSystem", path, true)
+				ResourceHelper.LoadReferenceResource(component, "particleSystem", pick.path, true)
 				component.emissionRate = 1.0
 				entity:AddComponent(component)
 				World.particlesAdded = World.particlesAdded + 1

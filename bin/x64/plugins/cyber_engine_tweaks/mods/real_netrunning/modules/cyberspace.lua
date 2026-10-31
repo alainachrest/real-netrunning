@@ -386,7 +386,12 @@ local function buildFloor(net, i, f, count)
 			-- cyberspace particles drifting through the room
 			if Kit.particleRooms > 0 and (x + y) % Kit.particleRooms == 0 then
 				local id = World.spawnBlock(rx, ry, cz + Kit.wallHeight / 2, 0, r / 2, r / 2, Kit.wallHeight / 2, Kit.particleKind)
-				if id ~= nil then table.insert(floor.props, id) Cyber.particlesAsked = (Cyber.particlesAsked or 0) + 1 end
+				if id ~= nil then
+					table.insert(floor.props, id)
+					Cyber.particlesAsked = (Cyber.particlesAsked or 0) + 1
+					floor.particleIds = floor.particleIds or {}
+					floor.particleIds[x .. "," .. y] = id
+				end
 			end
 			-- a ceiling on top of the walls, so nothing outside cyberspace shows
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight + 0.25, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.25, kind = 2 })
@@ -1761,6 +1766,13 @@ function Cyber.debug()
 		table.insert(hl, h.kind .. (h.follow and " (following)" or "") .. " floor " .. tostring(h.floor) .. (h.mode == "hunt" and " hunting" or ""))
 	end
 	table.insert(lines, "hunters: " .. (#hl > 0 and table.concat(hl, ", ") or "none"))
+	do
+		local floor = Cyber.floors[Cyber.floor]
+		local here = pos and roomAt(Cyber.floor, pos.x, pos.y)
+		local id = floor and floor.particleIds and here and floor.particleIds[here[1] .. "," .. here[2]]
+		local name = id and World.particleFor[tostring(id.hash)]
+		table.insert(lines, "particles in this room: " .. tostring(name or "none"))
+	end
 	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", blocks seen " .. tostring(World.particleSeen) ..
 		", particle blocks found " .. tostring(World.particleBlocks or 0) .. ", added " .. tostring(World.particlesAdded) ..
 		(World.particleError and (", error: " .. World.particleError) or ""))

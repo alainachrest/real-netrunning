@@ -143,8 +143,16 @@ Kit.markers = { file = 10, paydata = 11, taken = 12, down = 13, up = 14, exit = 
 Kit.markerSize = { [10] = 1.8, [11] = 1.8, [12] = 1.4, [13] = 6.0, [14] = 6.0, [15] = 3.0, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
 -- cyberspace particles in every room (1), every other room (2), or none (0)
 Kit.particleRooms = 1
--- the particle system drifting through each room (a .particle; the first that loads is used)
-Kit.roomParticles = "base\\fx\\quest\\q116\\q116_04_mikoshi_intro\\q116_alt_background.particle"
+-- the particle systems drifting through the rooms. While there's more than one,
+-- rooms take turns, so they can be compared side by side ('cyber debug' names
+-- the one in the room you're in); once one is chosen, list just that one.
+Kit.roomParticles = {
+	{ name = "hologram point cloud", path = "base\\fx\\quest\\q105\\q105_03d_dollhouse_evelyn_attack\\q105_hologram_fake_pointcloud.particle" },
+	{ name = "floating dust", path = "ep1\\fx\\quest\\q301\\crash_site\\q301_floating_dust.particle" },
+	{ name = "floating sparks", path = "ep1\\fx\\quest\\q301\\crash_site\\q301_floating_sparks_4x4.particle" },
+	{ name = "red security point cloud", path = "base\\fx\\devices\\security_systems\\security_gate\\d_security_gate_red_pointcloud.particle" },
+	{ name = "Blackwall particles", path = "ep1\\fx\\blackwall\\particle_systems\\blackwall_particle_system_base.particle" },
+}
 Kit.particleKind = 5
 
 function Kit.iceRecord(orgId, org, black)
