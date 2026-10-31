@@ -1762,7 +1762,7 @@ function Cyber.debug()
 	end
 	table.insert(lines, "hunters: " .. (#hl > 0 and table.concat(hl, ", ") or "none"))
 	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", blocks seen " .. tostring(World.particleSeen) ..
-		", added " .. tostring(World.particlesAdded) ..
+		", particle blocks found " .. tostring(World.particleBlocks or 0) .. ", added " .. tostring(World.particlesAdded) ..
 		(World.particleError and (", error: " .. World.particleError) or ""))
 	table.insert(lines, "V's effects: " .. tostring(World.playerEffects()))
 	local looks = World.cyberCall("MarkerAppearances")

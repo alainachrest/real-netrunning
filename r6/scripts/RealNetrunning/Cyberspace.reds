@@ -386,7 +386,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             return;
         }
         if kind == 5 {
-            // particles: added by the Lua side when the entity initialises (Hooks.reds)
+            // particles: added by the Lua side when the entity initialises
+            // (Hooks.reds); this unlit light is how it recognises the block
+            let tag = this.MakeColouredLight(RNLightColour(this.m_lightColour), 0.1, 0.0, 0.0);
+            tag.name = n"rn_particles_here";
+            template.AddComponent(tag);
             return;
         }
 

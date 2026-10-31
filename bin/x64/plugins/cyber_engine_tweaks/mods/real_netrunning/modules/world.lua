@@ -542,8 +542,9 @@ function World.watchParticleBlocks(kind, path)
 			local ok, err = pcall(function()
 				local entity = event:GetEntity()
 				if entity == nil then return end
-				local system = Game.GetScriptableSystemsContainer():Get("RealNetrunning.RNCyberspaceSystem")
-				if system == nil or system:BlockKind(entity:GetEntityID()) ~= kind then return end
+				-- particle blocks carry a component with this name (Cyberspace.reds)
+				if entity:FindComponentByName("rn_particles_here") == nil then return end
+				World.particleBlocks = (World.particleBlocks or 0) + 1
 				local component = entParticlesComponent.new()
 				component.name = "rn_particles"
 				ResourceHelper.LoadReferenceResource(component, "particleSystem", path, true)
