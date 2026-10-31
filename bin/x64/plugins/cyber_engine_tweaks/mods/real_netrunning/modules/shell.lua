@@ -8,6 +8,7 @@ local Rng = require("modules/rng")
 local NetWatch = require("modules/netwatch")
 local DeviceNet = require("modules/devicenet")
 local Junk = require("modules/junk")
+local Territory = require("modules/territory")
 
 local Shell = {
 	lines = {},        -- { text, kind } kind = "out" | "cmd" | "ok" | "warn" | "err"
@@ -156,6 +157,10 @@ def("scan", "scan [region or word]", "List networks you know. Filter by region (
 				local label = net.name .. (net.junk and "" or (" [" .. org.name .. "]"))
 				if net.uplink and not Network.isOwned(net.addr) then label = label .. "  <- uplink to " .. Lore.region(net.uplink).name end
 				if net.isolated then label = label .. "  (isolated: jack in on site)" end
+				local holder = Territory.holder(net.addr)
+				if holder ~= "player" and holder ~= net.org then label = label .. "  held by " .. Territory.holderName(holder) end
+				local attack = Territory.attackOn(net.addr)
+				if attack then label = label .. "  UNDER ATTACK by " .. Territory.holderName(attack.attacker) end
 				out(string.format("  %-34s ICE %d  %-6s %s", net.addr, net.ice, progress(net), label),
 					Network.isOwned(net.addr) and "ok" or (rowReach and "out" or "err"))
 				shown = shown + 1
@@ -773,6 +778,121 @@ function Shell.prompt()
 	return (Shell.connected and (Shell.connected .. ":" .. Shell.cwd) or "deck") .. ">"
 end
 
+---------------------------------------------------------------------------
+-- Territory: holding networks against the gangs and corps (modules/territory)
+---------------------------------------------------------------------------
+
+local function mins(seconds) return math.max(0, math.ceil(seconds / 60)) end
+
+def("holdings", "holdings", "The networks you hold, their defences, and any raids on them.", function()
+	local t = Territory.state()
+	local mine = Territory.playerNetworks()
+	if #mine == 0 then out("You don't hold any networks the gangs and corps fight over.") end
+	for _, net in ipairs(mine) do
+		local d = t.defense[net.addr] or {}
+		local guard = d.guard and (d.guard.name .. ", " .. mins(d.guard.untilClock - t.clock) .. " min left") or "no guard"
+		local a = t.attacks[net.addr]
+		out(string.format("  %-34s ICE %d  %s%s", net.addr, d.ice or 0, guard,
+			a and string.format("  UNDER ATTACK by %s (%d min)", Territory.holderName(a.attacker), mins(a.left)) or ""),
+			a and "err" or "ok")
+	end
+	local others = 0
+	for addr in pairs(Network.state.owned) do
+		local net = Network.get(addr)
+		if net and not Territory.contestable(net) then others = others + 1 end
+	end
+	if others > 0 then out("  Plus " .. others .. " device networks, computers and closed networks nobody fights over.") end
+	if #mine > 0 then out("Raise ICE with 'harden <level>', hire a guard with 'guard basic|elite', while connected to the network.") end
+end)
+
+def("territory", "territory", "Who holds how many networks, and the fights going on right now.", function()
+	local counts = Territory.counts()
+	local rows = {}
+	for holder, n in pairs(counts) do table.insert(rows, { holder = holder, n = n }) end
+	table.sort(rows, function(a, b) if a.n ~= b.n then return a.n > b.n end return a.holder < b.holder end)
+	out("NETWORKS HELD", "warn")
+	for _, r in ipairs(rows) do
+		out(string.format("  %-28s %d", Territory.holderName(r.holder), r.n), r.holder == "player" and "ok" or "out")
+	end
+	local t = Territory.state()
+	local fights = {}
+	for addr, a in pairs(t.attacks) do table.insert(fights, { addr = addr, a = a }) end
+	table.sort(fights, function(x, y) return x.addr < y.addr end)
+	if #fights > 0 then out("FIGHTING NOW", "warn") end
+	for _, f in ipairs(fights) do
+		local net = Network.get(f.addr)
+		out(string.format("  %s attacking %s (%s), %d min", Territory.holderName(f.a.attacker), net and net.name or f.addr,
+			Territory.holderName(f.a.holder), mins(f.a.left)), f.a.raid and "err" or "out")
+	end
+end)
+
+def("harden", "harden [level]", "Install your own ICE on a network you hold (costs eddies).", function(args)
+	local net = current()
+	if net == nil then out("Connect to a network you hold first.", "err") return end
+	local have = Territory.installedIce(net.addr)
+	local level = tonumber(args[1] or "")
+	if level == nil then
+		out("Your ICE on " .. net.name .. ": level " .. have .. ".")
+		for l = have + 1, Territory.maxIce do
+			out(string.format("  harden %d  %d eddies", l, Territory.iceCost(net, have, l)))
+		end
+		return
+	end
+	local ok, message = Territory.harden(net.addr, math.floor(level))
+	out(message, ok and "ok" or "err")
+end)
+
+def("guard", "guard [basic|elite|dismiss]", "Hire a netrunner to guard a network you hold for a while.", function(args)
+	local net = current()
+	if net == nil then out("Connect to a network you hold first.", "err") return end
+	local kind = args[1] and args[1]:lower()
+	if kind == nil then
+		local d = Territory.state().defense[net.addr]
+		if d and d.guard then
+			out("Guarding " .. net.name .. ": " .. d.guard.name .. " (" .. mins(d.guard.untilClock - Territory.state().clock) .. " min left).")
+		else
+			out("No guard on " .. net.name .. ".")
+		end
+		for name, g in pairs(Territory.guards) do
+			out(string.format("  guard %-6s %s, %d eddies for %d hours of play", name, g.name, Territory.guardCost(net, name), Territory.guardTerm / 3600))
+		end
+		return
+	end
+	local ok, message
+	if kind == "dismiss" then ok, message = Territory.dismissGuard(net.addr)
+	else ok, message = Territory.hireGuard(net.addr, kind) end
+	out(message, ok and "ok" or "err")
+end)
+
+def("defend", "defend", "Fight off an attack on the network you're connected to.", function()
+	local net = current()
+	if net == nil then out("Connect to the network under attack first.", "err") return end
+	local a = Territory.attackOn(net.addr)
+	if a == nil then out("Nobody's attacking this network.") return end
+	if NetWatch.lockout > 0 then out("Your deck is still rebooting (" .. math.ceil(NetWatch.lockout) .. "s).", "err") return end
+	if Shell.job then out("A job is already running.", "err") return end
+	local power = World.deckPower()
+	if power <= 0 then out("You need a cyberdeck installed to fight them off.", "err") return end
+	local duration = 5
+	Shell.job = { kind = "defend", addr = net.addr, attackId = a.id, elapsed = 0, duration = duration, power = power,
+		traceTotal = Network.isOwned(net.addr) and 0 or 8 * Network.lag(net), traced = 0 }
+	out(string.format("Counter-hacking %s's netrunners with deck power %d... (%ds)", Territory.holderName(a.attacker), power, duration), "warn")
+end)
+
+local function finishDefend(job, net)
+	local a = Territory.attackOn(net.addr)
+	if a == nil or a.id ~= job.attackId then return end
+	local chance = math.max(0.15, math.min(0.95, 0.5 + 0.15 * (job.power - Territory.strength(a.attacker))))
+	local roll = Shell.random and Shell.random() or math.random()
+	if roll < chance then
+		local left = Territory.weaken(net.addr, 2, "deck")
+		if left then out("You burned two of their footholds. Attack strength " .. left.power .. ". Keep going.", "ok") end
+	else
+		out("They shrugged off your counter-hack.", "err")
+		addTrace(8)
+	end
+end
+
 local function finishBank(job, net)
 	local node = Network.resolve(net, "/", job.path)
 	local b = node and node.bank
@@ -789,6 +909,7 @@ local function finishJob(job)
 	local net = Network.get(job.addr)
 	if net == nil then return end
 	if job.kind == "bank" then finishBank(job, net) return end
+	if job.kind == "defend" then finishDefend(job, net) return end
 	local f = Network.floors(net)[job.floor]
 	local index = Network.nextLock(net.addr)
 	if f == nil or index ~= job.floor then return end

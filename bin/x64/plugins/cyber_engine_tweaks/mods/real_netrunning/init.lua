@@ -27,6 +27,7 @@ local Web = require("modules/web")
 local NetWatch = require("modules/netwatch")
 local Cyber = require("modules/cyberspace")
 local Core = require("modules/core")
+local Territory = require("modules/territory")
 
 local RealNetrunning = {
 	version = "0.1.0",
@@ -62,6 +63,10 @@ Cyber.setCwd = function(path) Shell.setCwd(path) end
 Cyber.openDeck = function() if not Native.isOpen() then Native.open() end end
 Cyber.closeDeck = function() if Native.isOpen() then Native.close() end end
 Shell.cyber = Cyber
+Territory.print = Shell.print
+Territory.bus = Bus
+-- factions don't start a takeover of the network V is in the middle of hacking
+Territory.busy = function(addr) return Shell.connected == addr or (Cyber.active and Cyber.addr == addr) end
 
 ---------------------------------------------------------------------------
 -- Session handling
@@ -87,6 +92,7 @@ local function startWorld()
 	Network.build()
 	Shell.reset()
 	NetWatch.reset()
+	Territory.reset()
 	Cyber.onSessionStart()
 	Bridge.onWorldRebuilt()
 	Native.onWorldRebuilt()
@@ -146,6 +152,7 @@ registerForEvent("onInit", function()
 
 	Bus.on("*", newsFromEvents)
 	Bus.on("network.breached", Native.onBreached)
+	Bus.on("network.breached", Territory.onBreached)
 	Bus.on("network.floor", Native.onBreached)
 	Bus.on("hack.disconnected", Cyber.onDisconnected)
 	Market.attach(Bus)
@@ -170,6 +177,7 @@ registerForEvent("onUpdate", function(dt)
 			Shell.update(dt)
 			NetWatch.update(dt, Shell.connected)
 			Market.update(dt)
+			Territory.update(dt)
 			Cyber.update(dt)
 		end
 	end

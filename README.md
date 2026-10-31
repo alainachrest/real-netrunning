@@ -51,6 +51,11 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `ls`, `cd`, `cat` | Browse and read files once you have access |
 | `download <file>` | Sell paydata for eddies (corporate data may carry an insider tip) |
 | `leak <file>` | Leak paydata to the press: the owner's stock crashes, the journalist pays a little |
+| `holdings` | The networks you hold, their ICE and guards, and any raids on them |
+| `territory` | Who holds how many networks, and the fights going on right now |
+| `harden [level]` | Install your own ICE (up to 6) on a network you hold, for eddies. Without a level, lists the costs |
+| `guard [basic\|elite\|dismiss]` | Hire a netrunner to guard a network you hold for 2 hours of play |
+| `defend` | Counter-hack an attack on the network you're connected to |
 | `bank <file> [pin]` | Empty a bank account file (`.acct`) into your wallet: with its PIN, or leave the PIN off to brute-force it with your deck |
 | `market` | Stock prices |
 | `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
@@ -147,6 +152,22 @@ Some networks are air-gapped: you can't reach them over the Net at all. Each one
 - Some are **secret corporate research labs**, more likely behind access points that guard turrets or lots of devices. Each runs an off-books project under a codename, such as Militech's autonomous hunter drones or Zetatech's self-learning daemon. Their ICE is the hardest in Night City, and their research files are worth a fortune.
 - Selling research raises your heat. Leaking it to the press exposes the project by name and hits the company's stock harder than any other leak.
 - Each save has 14 private closed networks and 10 labs. Which device leads to which is decided the first time you jack into it, and stays that way.
+
+## Territory
+
+Networks change hands. The gangs and corporations fight over the Net all the time, and the networks you take are yours only as long as you can hold them.
+
+- Every few minutes of play a gang or corp goes after someone else's network. Gangs fight gangs (and take independent networks) on Night City's streets; corps fight corps anywhere. Rivals go for each other first: Valentinos and 6th Street, Maelstrom and Tyger Claws, Arasaka, Militech and Kang Tao, and so on. Each takeover plays out over a few minutes and ends up in the news.
+- When a network changes hands, its new owner rebuilds the ICE: any progress you'd made on it is gone, and you breach it from the lobby again. Nobody starts a takeover of the network you're working on at that moment.
+- `scan` shows who holds a network when it isn't its original operator, and which ones are under attack. `territory` shows who holds how many and every fight going on.
+- Taking a network from a gang or corp costs standing with them (more for bigger networks) and earns a little with their rivals. Standing is the shared core's, so other mods see it too.
+- Every hour or two of play, someone raids one of your networks: usually whoever you took it from, otherwise the factions that like you least. You get a warning and 5 minutes. When time runs out, the raid's strength is weighed against your defences: the stronger they are, the likelier you hold it. Lose it and you're back to breaching it from the lobby.
+- Defend your networks three ways:
+  - `harden <level>`: install your own ICE, levels 1 to 6. Costs rise steeply with each level and with the network's size.
+  - `guard basic` or `guard elite`: a hired netrunner sits on the network for 2 hours of play, adds to its defences and pushes raiders back while you're away. Guards can be flatlined in a hard fight.
+  - Fight them live: `defend` from the deck counter-hacks the attackers, or jack in and the raiders are there in cyberspace. Every one you derezz weakens the attack (and pays a little); they keep coming in waves until the attack breaks or ends.
+- You can join other people's fights too: jack into a network under attack and the attackers' netrunners are there, fighting the network's own ICE. Derezz them, or `defend` from the deck, and the defenders will remember who helped.
+- Only the Net's own networks are fought over. Device networks, computers, the public subnet and closed networks stay out of it.
 
 ## NetWatch
 

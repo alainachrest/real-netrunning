@@ -28,6 +28,7 @@ local World = require("modules/world")
 local Kit = require("modules/cyberkit")
 local NetWatch = require("modules/netwatch")
 local Rng = require("modules/rng")
+local Territory = require("modules/territory")
 
 local Cyber = {
 	active = false,
@@ -712,6 +713,7 @@ function Cyber.jackIn()
 	Cyber.bodySafe = addr:sub(1, 5) == "home."
 	Cyber.danger, Cyber.dangerTimer, Cyber.falls, Cyber.prompt = nil, 0, {}, nil
 	Cyber.hunters, Cyber.encounterTimer, Cyber.deepWarned, Cyber.agentFought = {}, 0, 0, false
+	Cyber.raidId, Cyber.raidWave = nil, nil
 	local s = state()
 	s.active, s.body, s.addr = true, { x = body.x, y = body.y, z = body.z, yaw = body.yaw }, addr
 
@@ -1158,6 +1160,11 @@ local function rewardFor(h)
 		say(message, "ok")
 	elseif h.kind == "patrol" then
 		say("Patrol ICE derezzed.", "ok")
+	elseif h.kind == "raider" then
+		local eddies = math.floor((100 + roll() * 150) * tier)
+		World.giveMoney(eddies)
+		local a = Territory.weaken(Cyber.addr, 2, "cyberspace")
+		say("You derezzed " .. h.name .. " (+" .. eddies .. " eddies)." .. (a and (" Attack strength " .. a.power .. ".") or " The attack is broken."), "ok")
 	end
 	emit("cyber.hunter_defeated", { addr = Cyber.addr, kind = h.kind })
 end
@@ -1301,6 +1308,63 @@ local function rollEncounter(dt)
 		World.warn("Rival netrunner")
 	end
 	emit("cyber.encounter", { addr = Cyber.addr, kind = kind, floor = Cyber.floor })
+end
+
+-- A fight over this network (modules/territory): the attackers' netrunners are
+-- here. Each one V derezzes weakens the attack; they come in waves until it ends.
+local function updateRaid(dt)
+	local a = Territory.attackOn(Cyber.addr)
+	local id = a and a.id
+	if id ~= Cyber.raidId then
+		if Cyber.raidId then
+			for _, h in ipairs(Cyber.hunters) do
+				if h.kind == "raider" and not h.gone then removeHunter(h, false) end
+			end
+			if a == nil then say("The fight over this network is over.", "warn") end
+		end
+		Cyber.raidId, Cyber.raidWave = id, nil
+	end
+	if a == nil then return end
+	local raiders = activeCount({ raider = true })
+	local floor = Cyber.floors[Cyber.floor]
+	if floor == nil or floor.layout == nil then return end
+	if raiders == 0 then
+		-- a new wave: straight away the first time, then after a breather
+		if Cyber.raidWave ~= nil then
+			Cyber.raidWave = Cyber.raidWave - dt
+			if Cyber.raidWave > 0 then return end
+		end
+		local org = Lore.getOrg(a.attacker)
+		local count = math.max(1, math.min(3, math.ceil(a.power / 3)))
+		local spawned = 0
+		for _ = 1, count do
+			if addHunter("raider", Kit.iceRecord(a.attacker, org, false), Cyber.floor, farRoom(Cyber.floor, 2, false),
+				{ name = org.name .. " netrunner" }) then spawned = spawned + 1 end
+		end
+		if spawned > 0 then
+			if a.raid then
+				say(org.name .. " netrunners are in your network, fighting for it. Derezz them.", "err")
+				World.warn(org.name .. " raiders")
+			elseif Cyber.raidWave == nil then
+				say(org.name .. " netrunners are fighting " .. Territory.holderName(a.holder) ..
+					" for this network. Hit them and you help the defenders.", "warn")
+			end
+		end
+		Cyber.raidWave = 20
+		return
+	end
+	-- the raiders and the network's own ICE fight each other
+	for _, r in ipairs(Cyber.hunters) do
+		if r.kind == "raider" and not r.gone and r.id and not r.enemies then
+			local ready = World.npcDead(r.id) ~= nil
+			if ready then
+				r.enemies = true
+				for _, h in ipairs(Cyber.hunters) do
+					if h.kind == "patrol" and not h.gone and h.id then World.makeEnemies(r.id, h.id) end
+				end
+			end
+		end
+	end
 end
 
 -- The NetWatch agent who traced into this network comes for V in person.
@@ -1760,6 +1824,8 @@ function Cyber.update(dt)
 		updateIce(step)
 		if not Cyber.active then return end
 		updateHunters(step)
+		if not Cyber.active then return end
+		updateRaid(step)
 		if not Cyber.active then return end
 		updateDepth(step)
 		if not Cyber.active then return end

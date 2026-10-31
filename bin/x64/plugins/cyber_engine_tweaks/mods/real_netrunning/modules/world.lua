@@ -350,6 +350,19 @@ function World.makeHostile(id)
 	end) == true
 end
 
+-- Two spawned NPCs that should fight each other (a raid's netrunners and the
+-- network's own ICE). True once both attitudes are set.
+function World.makeEnemies(a, b)
+	return try(function()
+		local x, y = Game.FindEntityByID(a), Game.FindEntityByID(b)
+		if x == nil or y == nil then return false end
+		local ax, ay = x:GetAttitudeAgent(), y:GetAttitudeAgent()
+		ax:SetAttitudeTowards(ay, EAIAttitude.AIA_Hostile)
+		ay:SetAttitudeTowards(ax, EAIAttitude.AIA_Hostile)
+		return true
+	end) == true
+end
+
 -- Takes every weapon off a spawned NPC except the item types in `keep` (e.g.
 -- fists), so it fights with quickhacks and bare hands like V.
 -- handsOnly: only take what it's holding right now, leaving its inventory alone.
