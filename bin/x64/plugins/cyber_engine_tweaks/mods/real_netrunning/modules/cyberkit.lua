@@ -75,11 +75,14 @@ Kit.ice = {
 Kit.netwatch = "Character.cpz_netwatch_agent_netrunner3_omaha_elite"
 
 -- Other things that can be found in any network, even ones you own.
+-- (ordinary freelance netrunners only: quest characters can be unkillable)
 Kit.rivals = {
 	"Character.afterlife_merc_netrunner_m_hard",
+	"Character.afterlife_merc_netrunner_w_medium",
 	"Character.afterlife_netrunner_netrunner2_yukimura_wa_rare",
-	"Character.sts_ep1_06_enemy_netrunner_rare_suit_ma",
-	"Character.generic_netrunner_netrunner_chao_ma_rare",
+	"Character.generic_netrunner_netrunner_chao_wa_rare",
+	"Character.nid_generic_netrunner_netrunner_chao_ma_rare",
+	"Character.nid_scavenger_netrunner2_netrunner2_nova_wa_rare",
 }
 Kit.rogueAI = {
 	"Character.kangtao_base_android",

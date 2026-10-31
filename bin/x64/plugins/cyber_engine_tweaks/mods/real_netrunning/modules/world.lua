@@ -291,8 +291,9 @@ end
 
 -- Takes every weapon off a spawned NPC except the item types in `keep` (e.g.
 -- fists), so it fights with quickhacks and bare hands like V.
+-- handsOnly: only take what it's holding right now, leaving its inventory alone.
 -- Returns how many weapons were removed (0 once it's unarmed), or nil if it isn't there yet.
-function World.disarm(id, keep)
+function World.disarm(id, keep, handsOnly)
 	local function kept(itemID)
 		if keep == nil then return false end
 		local ok, name = pcall(itemTypeName, itemID)
@@ -317,6 +318,7 @@ function World.disarm(id, keep)
 				end
 			end)
 		end
+		if handsOnly then return removed end
 		for _, data in ipairs(items) do
 			if data:HasTag("Weapon") and not kept(data:GetID()) then
 				ts:RemoveItem(npc, data:GetID(), data:GetQuantity())

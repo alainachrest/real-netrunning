@@ -64,6 +64,25 @@ local Cyber = {
 }
 
 local function roll() return Cyber.random and Cyber.random() or math.random() end
+-- Keeps a spawned enemy fighting like V (quickhacks and bare hands). Its whole
+-- inventory is swept for the first few seconds; after that only a gun or blade
+-- actually in its hands is taken, every couple of seconds, so its AI isn't
+-- interrupted all the time (that stopped enemies fighting at all).
+local function keepDisarmed(id, dt)
+	Cyber.armory = Cyber.armory or {}
+	local s = Cyber.armory[id]
+	if s == nil then s = { sweeps = 0, wait = 0 } Cyber.armory[id] = s end
+	if s.sweeps < 6 then
+		World.disarm(id, Kit.allowedWeapons)
+		s.sweeps = s.sweeps + 1
+		return
+	end
+	s.wait = s.wait - (dt or 0.5)
+	if s.wait > 0 then return end
+	s.wait = 2.0
+	World.disarm(id, Kit.allowedWeapons, true)
+end
+
 local function emit(event, data) if Cyber.bus then Cyber.bus.emit(event, data) end end
 local function say(text, kind) Cyber.print(text, kind or "out") end
 
@@ -518,6 +537,7 @@ local function clear()
 	for i in pairs(Cyber.floors) do unbuildFloor(i) end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
 	Cyber.clearHunters()
+	Cyber.armory = {}
 	World.cyberCall("ForgetBlocks")
 	Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC = {}, {}, {}, nil
 end
@@ -789,7 +809,7 @@ local function updateIce(dt)
 			-- ICE fights like V: quickhacks and bare hands, no guns or blades. Checked every tick for
 			-- as long as it lives: NPCs draw a fresh weapon from their loadout
 			-- once a fight starts.
-			World.disarm(id, Kit.allowedWeapons)
+			keepDisarmed(id, dt)
 		elseif dead == nil then
 			alive = alive + 1 -- still spawning
 		end
@@ -1019,7 +1039,7 @@ local function updateHunter(h, dt, here)
 		return
 	end
 	if not h.hostile then h.hostile = World.makeHostile(h.id) end
-	World.disarm(h.id, Kit.allowedWeapons) -- every tick: NPCs re-arm from their loadout in a fight
+	keepDisarmed(h.id, dt)
 	if h.floor ~= Cyber.floor then return end
 	local floor = Cyber.floors[h.floor]
 	local L = floor and floor.layout
