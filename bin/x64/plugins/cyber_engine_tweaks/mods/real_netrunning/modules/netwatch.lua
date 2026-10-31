@@ -101,6 +101,8 @@ local function updateAgent(dt, connected)
 		local tier = NetWatch.tier()
 		local net = Network.get(connected)
 		if net == nil or net.kind == "site" or roll() >= spawnChance(tier) then return end
+		-- NetWatch traces in over the Net: networks with no link to it are out of reach
+		if net.isolated or net.closed then return end
 		NetWatch.agent = makeAgent(net, tier)
 		NetWatch.print("WARNING: " .. NetWatch.agent.name .. " is tracing into this network. 'fight' it when it arrives, or disconnect.", "err")
 		World.warn("NetWatch incoming")
