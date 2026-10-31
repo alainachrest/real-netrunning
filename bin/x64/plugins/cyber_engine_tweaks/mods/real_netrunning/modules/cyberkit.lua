@@ -123,8 +123,12 @@ end
 -- Status effects while jacked in: no fast travel.
 Kit.restrictions = { "GameplayRestriction.BlockFastTravel" }
 -- No guns or blades in cyberspace: quickhacks and bare hands only. Weapons of
--- any other type are put away as soon as they're drawn (with this effect, briefly).
+-- any other type are swapped for fists as soon as they're drawn, by applying
+-- the boxing-match restriction (it makes V put weapons away and raise their
+-- fists) until the weapon is gone. Blocking weapons alone doesn't holster one
+-- that's already drawn.
 Kit.allowedWeapons = { "Wea_Fists", "Cyb_StrongArms" }  -- gamedataItemType names
-Kit.holsterEffect = "GameplayRestriction.NoWeapons"
+Kit.holsterEffect = "GameplayRestriction.FistFight"
+Kit.holsterTime = 2.0   -- seconds to keep it on after the weapon is gone
 
 return Kit

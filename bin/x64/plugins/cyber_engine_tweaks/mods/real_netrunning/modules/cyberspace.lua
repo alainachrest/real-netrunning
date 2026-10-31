@@ -1314,18 +1314,23 @@ end
 -- A gun or blade in V's hands is put away (briefly blocking weapons, which
 -- makes V holster), then weapons are allowed again so fists still work.
 local function updateWeapons(dt)
+	local kind = World.weaponInHand()
 	if Cyber.holstering then
-		Cyber.holstering = Cyber.holstering - dt
-		if Cyber.holstering <= 0 or not World.weaponInHand() then
+		-- kept on until the weapon has been gone for a moment
+		if allowedWeapon(kind) then
+			Cyber.holstering = Cyber.holstering - dt
+		else
+			Cyber.holstering = Kit.holsterTime
+		end
+		if Cyber.holstering <= 0 then
 			World.removeStatusEffect(Kit.holsterEffect)
 			Cyber.holstering = nil
 		end
 		return
 	end
-	local kind = World.weaponInHand()
 	if not allowedWeapon(kind) then
 		World.applyStatusEffect(Kit.holsterEffect)
-		Cyber.holstering = 1.0
+		Cyber.holstering = Kit.holsterTime
 		World.notify("No weapons in cyberspace: quickhacks and bare hands only")
 	end
 end
