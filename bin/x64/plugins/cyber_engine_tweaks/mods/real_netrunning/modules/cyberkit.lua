@@ -117,7 +117,11 @@ function Kit.ambience(org, tier)
 	return Kit.templates.ambienceLocal
 end
 
--- Status effects while jacked in: no guns in cyberspace, no fast travel.
-Kit.restrictions = { "GameplayRestriction.NoWeapons", "GameplayRestriction.BlockFastTravel" }
+-- Status effects while jacked in: no fast travel.
+Kit.restrictions = { "GameplayRestriction.BlockFastTravel" }
+-- No guns or blades in cyberspace: quickhacks and bare hands only. Weapons of
+-- any other type are put away as soon as they're drawn (with this effect, briefly).
+Kit.allowedWeapons = { "Wea_Fists", "Cyb_StrongArms" }  -- gamedataItemType names
+Kit.holsterEffect = "GameplayRestriction.NoWeapons"
 
 return Kit

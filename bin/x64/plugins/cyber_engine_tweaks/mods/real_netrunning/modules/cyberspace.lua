@@ -17,7 +17,8 @@
 --   * deep floors of networks V doesn't own raise trace just for being there
 --   * 'cyber scan' maps the rooms around V, at a cost in trace
 --
--- No guns in cyberspace: quickhacks only. Saving is blocked while jacked in.
+-- No guns or blades in cyberspace: quickhacks and bare hands (fists, Gorilla
+-- Arms). Saving is blocked while jacked in.
 -- Jack out any time; a dangerous jack-out (trace, low health, something
 -- finding V's body) hurts.
 
@@ -596,6 +597,7 @@ function Cyber.jackOut(reason, quiet)
 	local body = Cyber.body
 	if body then World.teleport(body.x, body.y, body.z + 0.1, body.yaw) end
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
+	World.removeStatusEffect(Kit.holsterEffect)
 	World.setJackedIn(false)
 	local forced = reason ~= nil and reason ~= "user" and reason ~= "cancelled"
 	if forced and reason ~= "broken" and reason ~= "cancelled" then
@@ -639,6 +641,7 @@ local function recover()
 	local s = state()
 	if s.body then World.teleport(s.body.x, s.body.y, s.body.z + 0.1, s.body.yaw) end
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
+	World.removeStatusEffect(Kit.holsterEffect)
 	World.setJackedIn(false)
 	s.active, s.body, s.addr = false, nil, nil
 	say("You wake up where you jacked in.", "warn")
@@ -1277,6 +1280,38 @@ function Cyber.scan()
 end
 
 ---------------------------------------------------------------------------
+-- Bare hands only
+---------------------------------------------------------------------------
+
+local function allowedWeapon(kind)
+	if kind == nil then return true end
+	for _, k in ipairs(Kit.allowedWeapons) do
+		if kind == k then return true end
+	end
+	return false
+end
+
+-- A gun or blade in V's hands is put away (briefly blocking weapons, which
+-- makes V holster), then weapons are allowed again so fists still work.
+local function updateWeapons(dt)
+	if Cyber.holstering then
+		Cyber.holstering = Cyber.holstering - dt
+		if Cyber.holstering <= 0 or not World.weaponInHand() then
+			World.removeStatusEffect(Kit.holsterEffect)
+			Cyber.holstering = nil
+		end
+		return
+	end
+	local kind = World.weaponInHand()
+	if not allowedWeapon(kind) then
+		World.applyStatusEffect(Kit.holsterEffect)
+		Cyber.holstering = 1.0
+		World.notify("No weapons in cyberspace: quickhacks and bare hands only")
+	end
+end
+Cyber.allowedWeapon = allowedWeapon
+
+---------------------------------------------------------------------------
 -- Every frame
 ---------------------------------------------------------------------------
 
@@ -1401,6 +1436,8 @@ function Cyber.update(dt)
 			if o then World.notify("[Use] " .. promptFor(o)) end
 		end
 	end
+
+	updateWeapons(dt)
 
 	if World.healthPercent() < 15 then
 		local lock = lockAfter(Cyber.floor)

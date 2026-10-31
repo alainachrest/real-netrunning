@@ -112,6 +112,22 @@ function World.applyStatusEffect(effect)
 	end)
 end
 
+-- The item type of the weapon in V's hands ("Wea_Fists", "Wea_Pistol", ...), or nil when empty-handed.
+function World.weaponInHand()
+	return try(function()
+		local player = Game.GetPlayer()
+		if player == nil then return nil end
+		local item = Game.GetTransactionSystem():GetItemInSlot(player, TweakDBID.new("AttachmentSlots.WeaponRight"))
+		if item == nil then return nil end
+		local record = TweakDBInterface.GetItemRecord(item:GetItemID():GetTDBID())
+		if record == nil then return "unknown" end
+		local kind = record:ItemType():Type()
+		local ok, name = pcall(function() return EnumValueToString("gamedataItemType", EnumInt(kind)) end)
+		if ok and type(name) == "string" and name ~= "" then return name end
+		return tostring(kind):match("([%w_]+)%s*%(") or tostring(kind)
+	end)
+end
+
 -- Tips off the NCPD: the same request the game makes when a crime is witnessed.
 function World.reportToPolice()
 	return try(function()
