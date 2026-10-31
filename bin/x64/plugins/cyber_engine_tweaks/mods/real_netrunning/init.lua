@@ -63,6 +63,7 @@ Cyber.setCwd = function(path) Shell.setCwd(path) end
 Cyber.openDeck = function() if not Native.isOpen() then Native.open() end end
 Cyber.closeDeck = function() if Native.isOpen() then Native.close() end end
 Shell.cyber = Cyber
+Network.gameSeconds = World.gameSeconds
 Territory.print = Shell.print
 Territory.bus = Bus
 -- factions don't start a takeover of the network V is in the middle of hacking
@@ -153,6 +154,11 @@ registerForEvent("onInit", function()
 	Bus.on("*", newsFromEvents)
 	Bus.on("network.breached", Native.onBreached)
 	Bus.on("network.breached", Territory.onBreached)
+	Bus.on("network.relocked", function(e)
+		local net = Network.get(e.addr)
+		Shell.print("The passwords on " .. (net and net.name or e.addr) .. " have changed. Floor " .. e.floor ..
+			" is locked again: find the new code or crack it.", "warn")
+	end)
 	Bus.on("network.floor", Native.onBreached)
 	Bus.on("hack.disconnected", Cyber.onDisconnected)
 	Market.attach(Bus)

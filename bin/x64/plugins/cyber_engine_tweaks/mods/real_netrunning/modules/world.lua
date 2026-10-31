@@ -580,6 +580,19 @@ function World.isPaused()
 	return try(function() return Game.GetSystemRequestsHandler():IsGamePaused() end) == true
 end
 
+-- The game's own clock in seconds (it moves when V sleeps or skips time), or nil.
+-- Quiet: it's asked for often, and a missing call shouldn't fill the log.
+function World.gameSeconds()
+	if World.noGameClock then return nil end
+	local ok, t = pcall(function() return Game.GetTimeSystem():GetGameTimeStamp() end)
+	if ok and type(t) == "number" then return t end
+	if not ok then
+		World.noGameClock = true
+		if World.log then World.log("game clock not available, password changes will follow play time: " .. tostring(t)) end
+	end
+	return nil
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

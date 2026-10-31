@@ -422,6 +422,67 @@ function Network.floorFolder(index, f)
 	return string.format("%02d_%s", index, f.kind)
 end
 
+-- Password rotation: secure networks change their gate codes every few in-game
+-- days (ICE 5+ every 2 days, ICE 3-4 every 4), each on its own schedule. When the
+-- codes change, any gate V got through without taking root is locked again.
+Network.gameSeconds = function() return nil end -- set by init: the game's clock, in seconds
+
+local DAY = 86400
+function Network.passwordDays(net)
+	if net.ice >= 5 then return 2 end
+	if net.ice >= 3 then return 4 end
+	return nil
+end
+
+local function gameNow()
+	local t = Network.gameSeconds()
+	if type(t) == "number" then return t end
+	return Network.clock() * 8 -- the game's default: 8 game seconds to a real one
+end
+
+-- Which set of codes a network is on (0 = the first, or it never changes them).
+function Network.passwordGen(net)
+	local days = Network.passwordDays(net)
+	if days == nil then return 0 end
+	local period = days * DAY
+	local offset = Rng.hash("pw" .. net.addr) % period
+	local start = Network.state.pwStart and Network.state.pwStart[net.addr]
+	if start == nil then
+		-- counted from the first time the network is looked at, so codes don't change on day one
+		Network.state.pwStart = Network.state.pwStart or {}
+		start = math.floor((gameNow() + offset) / period)
+		Network.state.pwStart[net.addr] = start
+	end
+	return math.max(0, math.floor((gameNow() + offset) / period) - start)
+end
+
+-- The code that opens password floor `index` right now.
+function Network.password(net, index, f)
+	local gen = Network.passwordGen(net)
+	if gen == 0 then return f.password end
+	local rng = Rng.new(Network.state.seed or 0, "pw", net.addr, index, gen)
+	return rng:pick(passwords) .. rng:int(10, 99)
+end
+
+-- Locks gates again after their codes changed (not on networks V has root on).
+local function checkRotation(addr, net)
+	if Network.passwordDays(net) == nil then return end
+	local gen = Network.passwordGen(net)
+	Network.state.pwGen = Network.state.pwGen or {}
+	local seen = Network.state.pwGen[addr] or 0
+	if gen == seen then return end
+	Network.state.pwGen[addr] = gen
+	if Network.state.owned[addr] then return end
+	local depth = Network.state.depth[addr] or 1
+	for i, f in ipairs(Network.floors(net)) do
+		if f.kind == "password" and i <= depth then
+			Network.state.depth[addr] = math.max(1, i - 1)
+			emit("network.relocked", { addr = addr, floor = i })
+			return
+		end
+	end
+end
+
 -- An unguarded core (no ICE) still has to be reached to take root: it stays
 -- shut until V walks in (cyberspace) or breaches it (deck), which is instant.
 local function isLocked(f)
@@ -446,6 +507,7 @@ function Network.depth(addr)
 	if net == nil then return 0 end
 	local floors = Network.floors(net)
 	if Network.state.owned[addr] then return #floors end
+	checkRotation(addr, net)
 	local depth = Network.state.depth[addr] or 1
 	while depth < #floors and not isLocked(floors[depth + 1]) do depth = depth + 1 end
 	return depth
@@ -600,7 +662,7 @@ local function buildFs(net, gen)
 			for j = i - 1, 2, -1 do
 				if floors[j].kind == "files" then
 					hints[j] = hints[j] or {}
-					table.insert(hints[j], { floor = i, code = f.password })
+					table.insert(hints[j], { floor = i, code = Network.password(net, i, f) })
 					break
 				end
 			end
@@ -712,8 +774,9 @@ end
 
 function Network.fs(net)
 	local gen = Network.dataGen(net)
-	if net.fs == nil or net.fsGen ~= gen then
-		net.fs, net.fsGen = buildFs(net, gen), gen
+	local key = gen .. ":" .. Network.passwordGen(net) -- new codes mean new hint mail
+	if net.fs == nil or net.fsKey ~= key then
+		net.fs, net.fsKey = buildFs(net, gen), key
 	end
 	return net.fs
 end

@@ -380,7 +380,7 @@ def("password", "password <code>", "Open a password gate.", function(args)
 	local index, f = Network.nextLock(net.addr)
 	if index == nil or f.kind ~= "password" then out("There's no password gate ahead.") return end
 	if not args[1] then out("Usage: password <code>", "err") return end
-	if args[1]:upper() == tostring(f.password):upper() then
+	if args[1]:upper() == tostring(Network.password(net, index, f)):upper() then
 		Network.unlockNext(net.addr)
 		out("Access code accepted. Floor " .. index .. " open.", "ok")
 		emit("hack.breach", { addr = net.addr, org = net.org, success = true, ice = f.ice, tier = net.tier, floor = index })
