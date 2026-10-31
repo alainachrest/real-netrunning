@@ -20,7 +20,7 @@ Kit.defaultStyle = 2     -- floor: Mikoshi prison platform
 Kit.defaultWalls = 3     -- walls: Mikoshi cyberspace wall
 Kit.defaultScale = 1.3   -- the prison platform looks right a little larger
 Kit.defaultLightColour = 1 -- netrunner blue
-Kit.lightLevel = 1.0
+Kit.lightLevel = 0.8   -- rooms' own light (markers keep theirs)
 -- the big scenery (point clouds, particles) stands well away from the platforms
 Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
 Kit.useRadius = 2.6      -- how close V must be to use an object
@@ -143,15 +143,10 @@ Kit.markers = { file = 10, paydata = 11, taken = 12, down = 13, up = 14, exit = 
 Kit.markerSize = { [10] = 1.8, [11] = 1.8, [12] = 1.4, [13] = 6.0, [14] = 6.0, [15] = 3.0, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
 -- cyberspace particles in every room (1), every other room (2), or none (0)
 Kit.particleRooms = 1
--- the particle systems drifting through the rooms. While there's more than one,
--- rooms take turns, so they can be compared side by side ('cyber debug' names
--- the one in the room you're in); once one is chosen, list just that one.
+-- the particle system drifting through every room (more than one: rooms take
+-- turns, and 'cyber debug' names the one in the room you're in)
 Kit.roomParticles = {
-	{ name = "hologram point cloud", path = "base\\fx\\quest\\q105\\q105_03d_dollhouse_evelyn_attack\\q105_hologram_fake_pointcloud.particle" },
 	{ name = "floating dust", path = "ep1\\fx\\quest\\q301\\crash_site\\q301_floating_dust.particle" },
-	{ name = "floating sparks", path = "ep1\\fx\\quest\\q301\\crash_site\\q301_floating_sparks_4x4.particle" },
-	{ name = "red security point cloud", path = "base\\fx\\devices\\security_systems\\security_gate\\d_security_gate_red_pointcloud.particle" },
-	{ name = "Blackwall particles", path = "ep1\\fx\\blackwall\\particle_systems\\blackwall_particle_system_base.particle" },
 }
 Kit.particleKind = 5
 

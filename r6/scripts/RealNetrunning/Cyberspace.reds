@@ -69,7 +69,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_scale = 1.3;
         this.m_style = 2;
         this.m_wallStyle = 3;
-        this.m_lightLevel = 1.0;
+        this.m_lightLevel = 0.8;
         this.m_lightColour = 1;
         this.m_pending = Vector4(12.0, 12.0, 0.5, 0.0);
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
@@ -282,7 +282,8 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             this.FitUniform(template, fit, RNMarkerMesh(index), RNMarkerLift(kind), size, index == 0,
                 RNFindAppearance(fit, RNMarkerLook(kind)));
         }
-        let lumens = RNMarkerLumens(kind) * MaxF(0.3, this.m_lightLevel);
+        // markers keep their full brightness however the rooms are lit
+        let lumens = RNMarkerLumens(kind);
         template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), size + 4.0, lumens, RNMarkerLift(kind) + size * 0.5));
         // the ways up and down also throw a strong pool of colour on the floor
         // around them, so they stand out against the room's own light
