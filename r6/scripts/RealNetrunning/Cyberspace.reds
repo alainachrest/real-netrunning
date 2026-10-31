@@ -245,6 +245,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         }
         let lumens = RNMarkerLumens(kind) * MaxF(0.3, this.m_lightLevel);
         template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), size + 4.0, lumens, RNMarkerLift(kind) + size * 0.5));
+        // the ways up and down also throw a strong pool of colour on the floor
+        // around them, so they stand out against the room's own light
+        if kind == 13 || kind == 14 {
+            template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), 7.0, lumens, 0.6));
+        }
     }
 
     // For 'cyber debug': how many marker meshes have loaded.
@@ -552,7 +557,8 @@ public func RNMarkerLift(kind: Int32) -> Float {
 
 public func RNMarkerLumens(kind: Int32) -> Float {
     if kind == 12 { return 600.0; }
-    if kind == 13 || kind == 18 { return 6000.0; }
+    if kind == 13 || kind == 14 { return 16000.0; }
+    if kind == 18 { return 6000.0; }
     if kind == 16 { return 4000.0; }
     return 3000.0;
 }
