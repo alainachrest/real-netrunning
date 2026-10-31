@@ -50,7 +50,8 @@ public func RNItemName(tdbid: String) -> String {
     if !IsDefined(record) {
         return "";
     }
-    let name = LocKeyToString(record.DisplayName());
+    // the item's own name in the player's language
+    let name = GetLocalizedTextByKey(record.DisplayName());
     return StrLen(name) > 0 ? name : tdbid;
 }
 

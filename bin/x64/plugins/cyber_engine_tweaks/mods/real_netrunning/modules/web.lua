@@ -110,10 +110,11 @@ function Page:text(text, color) return self:add("text", text, "", "", color) end
 function Page:link(text, link) return self:add("link", text, "", link) end
 function Page:button(text, link, color) return self:add("button", text, "", link, color) end
 function Page:card(title, body, link, color) return self:add("card", title, body, link, color) end
-function Page:row(columns, link, color)
+-- widths (optional): each column's share of the row in percent, e.g. { 50, 18, 10, 22 }
+function Page:row(columns, link, color, widths)
 	local safe = {}
 	for i, c in ipairs(columns) do safe[i] = tostring(c):gsub("|", "/") end
-	return self:add("row", table.concat(safe, "|"), "", link, color)
+	return self:add("row", table.concat(safe, "|"), widths and table.concat(widths, ",") or "", link, color)
 end
 function Page:chart(values, color) return self:add("chart", "", table.concat(values, ","), "", color) end
 function Page:divider() return self:add("divider") end
@@ -243,11 +244,12 @@ local function shopPage(key, pageNo, result)
 	if store.about then p:text(store.about) end
 	p:field("Your eddies", tostring(World.getMoney()), YELLOW)
 	p:field("Items", tostring(store.count))
-	p:row({ "ITEM", "QUALITY", "QTY", "PRICE" }, "", YELLOW)
+	local widths = { 52, 18, 8, 22 }
+	p:row({ "ITEM", "QUALITY", "QTY", "PRICE" }, "", YELLOW, widths)
 	for n, item in ipairs(store.items) do
 		local index = store.first + n - 1
 		p:row({ item.name, item.quality ~= "" and item.quality or "-", "x" .. item.quantity, tostring(item.price) .. " eddies" },
-			"shop://" .. key .. "/item/" .. index, BLUE)
+			"shop://" .. key .. "/item/" .. index, BLUE, widths)
 	end
 	if pages > 1 then
 		p:divider()

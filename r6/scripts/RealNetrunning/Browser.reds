@@ -685,13 +685,23 @@ public class RNBrowserView {
         columns.SetMargin(inkMargin(12.0, 4.0, 0.0, 0.0));
         columns.Reparent(row);
         let parts = StrSplit(block.text, "|", true);
+        // a page can give its own column widths, as percentages of the row ("50,18,10,22")
+        let shares = StrSplit(block.extra, ",", false);
+        let usable = width - 24.0;
         let i = 0;
         while i < ArraySize(parts) {
+            let columnWidth = this.ColumnWidth(i);
+            if i < ArraySize(shares) {
+                let share = StringToFloat(shares[i]);
+                if share > 0.0 {
+                    columnWidth = usable * share / 100.0;
+                }
+            }
             let cell = new inkCanvas();
-            cell.SetSize(this.ColumnWidth(i), 30.0);
+            cell.SetSize(columnWidth, 30.0);
             cell.Reparent(columns);
             let text = RNText(n"cell", 24, i == 0 ? color : (i == ArraySize(parts) - 1 ? color : n"MainColors.Blue"));
-            text.SetText(RNShorten(parts[i], Cast<Int32>(this.ColumnWidth(i) / 13.0)));
+            text.SetText(RNShorten(parts[i], Cast<Int32>((columnWidth - 16.0) / 13.0)));
             text.Reparent(cell);
             i += 1;
         }
