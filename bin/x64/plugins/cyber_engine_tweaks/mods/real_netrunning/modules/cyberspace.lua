@@ -65,8 +65,9 @@ local Cyber = {
 
 local function roll() return Cyber.random and Cyber.random() or math.random() end
 -- Keeps a spawned enemy fighting like V: fists and Gorilla Arms only. Some of
--- the brawlers carry a sidearm they pull once a fight starts, so every guns
--- and blades are taken from their hands and their pockets every half second;
+-- the brawlers carry a sidearm they pull once a fight starts: they spawn from a
+-- copy of their record without it (World.fistsOnlyRecord), and as a backup any
+-- guns and blades are taken from their hands and pockets every half second;
 -- their fists are left alone, so they keep fighting.
 local function keepDisarmed(id, dt)
 	World.disarm(id, Kit.allowedWeapons)
@@ -860,7 +861,7 @@ local function spawnIce(i)
 	if spot then x, y, z = spot.x, spot.y, spot.z else x, y, z = descentPoint(i) end
 	for k = 1, count do
 		local offset = (k - (count + 1) / 2) * 2.5
-		local id = World.spawnNPC(record, x + offset, y + offset * 0.3, z + 0.2, 180)
+		local id = World.spawnNPC(World.fistsOnlyRecord(record) or record, x + offset, y + offset * 0.3, z + 0.2, 180)
 		if id ~= nil then table.insert(floor.ice, id) end
 	end
 	say((lock.kind == "black" and "BLACK ICE" or "ICE") .. " materialises in front of the sealed doorway. " ..
@@ -1005,7 +1006,7 @@ local function spawnHunter(h, room, from)
 	end
 	h.room = room
 	if h.id == nil then
-		h.id = World.spawnNPC(h.record, x, y, floor.z + 0.2, yaw)
+		h.id = World.spawnNPC(World.fistsOnlyRecord(h.record) or h.record, x, y, floor.z + 0.2, yaw)
 		h.hostile, h.disarmed = false, 0
 		return h.id ~= nil
 	end
