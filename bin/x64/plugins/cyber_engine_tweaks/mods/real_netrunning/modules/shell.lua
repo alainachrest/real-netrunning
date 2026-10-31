@@ -6,6 +6,7 @@ local World = require("modules/world")
 local Market = require("modules/market")
 local Rng = require("modules/rng")
 local NetWatch = require("modules/netwatch")
+local DeviceNet = require("modules/devicenet")
 
 local Shell = {
 	lines = {},        -- { text, kind } kind = "out" | "cmd" | "ok" | "warn" | "err"
@@ -117,8 +118,9 @@ def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
 	end
 end)
 
-def("scan", "scan [region or word]", "List networks you know. Filter by region (nc, nusa, pacific, eu, orbit), 'local' for small nets, or any word.", function(args)
+def("scan", "scan [region or word]", "List networks you know. Filter by region (nc, nusa, pacific, eu, orbit), 'local' for small nets, 'devices' for device networks, or any word. 'nearby' finds the device networks around you.", function(args)
 	local filter = args[1] and args[1]:lower()
+	if filter == "nearby" or filter == "here" then commands.nearby.fn({}) return end
 	local shown = 0
 	for _, region in ipairs(Lore.regionOrder) do
 		local rows = {}
@@ -128,6 +130,7 @@ def("scan", "scan [region or word]", "List networks you know. Filter by region (
 				local match = filter == nil or filter == region
 					or (filter == "local" and net.junk ~= nil)
 					or (filter == "corp" and net.junk == nil)
+					or ((filter == "devices" or filter == "device") and (net.kind == "ap" or net.kind == "system" or net.kind == "mesh" or net.kind == "device"))
 					or net.addr:lower():find(filter, 1, true) or net.name:lower():find(filter, 1, true)
 					or org.name:lower():find(filter, 1, true)
 				if match then table.insert(rows, net) end
@@ -143,12 +146,14 @@ def("scan", "scan [region or word]", "List networks you know. Filter by region (
 					reach and "warn" or "err")
 			end
 			for _, net in ipairs(rows) do
-				if region == "closed" then reach = Network.canReach(net) end
+				local rowReach = reach
+				if region == "closed" or net.isolated then rowReach = Network.canReach(net) end
 				local org = Lore.getOrg(net.org)
 				local label = net.name .. (net.junk and "" or (" [" .. org.name .. "]"))
 				if net.uplink and not Network.isOwned(net.addr) then label = label .. "  <- uplink to " .. Lore.region(net.uplink).name end
+				if net.isolated then label = label .. "  (isolated: jack in on site)" end
 				out(string.format("  %-34s ICE %d  %-6s %s", net.addr, net.ice, progress(net), label),
-					Network.isOwned(net.addr) and "ok" or (reach and "out" or "err"))
+					Network.isOwned(net.addr) and "ok" or (rowReach and "out" or "err"))
 				shown = shown + 1
 			end
 		end
@@ -225,6 +230,9 @@ def("connect", "connect <address>", "Connect to a network from scan.", function(
 			Network.jacked, Network.jackedDevice = nil, nil
 			return
 		end
+	elseif net.isolated and Network.jacked ~= addr then
+		out(net.name .. " is isolated: no link to the Net. Go back and 'jack' into one of its devices.", "err")
+		return
 	elseif not Network.canReach(net) then
 		out("No uplink to " .. Lore.region(net.region).name .. ". Get root on a backbone that routes there. Type 'uplinks'.", "err")
 		return
@@ -478,42 +486,48 @@ local function bridgeCheck(addr, opts)
 	end
 end
 
-def("jack", "jack", "Jack into the device you're looking at.", function()
+def("jack", "jack", "Jack into the device you're looking at. Every device is on a network: you join it.", function()
 	local device, err = World.lookAtDevice()
 	if device == nil then out(err, "err") return end
 
-	-- devices wired to an access point join its network
-	local ap = World.accessPointFor(device)
-	if ap then
-		local devices = World.devicesOn(ap)
-		local turrets = 0
-		for _, d in ipairs(devices) do if d.kind == "turret" then turrets = turrets + 1 end end
-		local addr = "ap." .. string.format("%06x", Rng.hash(ap.hash) % 16777216)
-		Network.register({
-			addr = addr, name = "Access point network", org = "unregistered", tier = 1, kind = "ap",
-			ice = math.min(6, 2 + math.floor(#devices / 6) + (turrets > 0 and 1 or 0)),
-			devices = devices, known = true,
-		})
-		Network.jacked, Network.jackedDevice = addr, ap
-		commands.connect.fn({ addr })
-		out("Jacked into an access point network with " .. #devices .. " devices. Reach its control floor to use 'devices'.")
-		emit("hack.jack", { addr = addr, devices = #devices })
-		bridgeCheck(addr, { kind = "ap", devices = #devices, turrets = turrets })
-		return
+	local net, extra = DeviceNet.forDevice(device)
+	if net == nil then out("The device didn't answer.", "err") return end
+	Network.jacked, Network.jackedDevice = net.addr, device
+	commands.connect.fn({ net.addr })
+	local what, count = DeviceNet.describe(net)
+	if net.kind == "device" then
+		out("Jacked into " .. device.label:lower() .. ". It's on " .. what .. ". Controls: " ..
+			table.concat(World.deviceActionsFor(device.kind), ", "))
+	else
+		out("Jacked into " .. net.name .. ": " .. what .. " with " .. count .. (count == 1 and " device" or " devices") ..
+			". Reach its control floor to use 'devices'.")
 	end
+	if net.isolated then
+		out("It's isolated: no link to the Net. The only way in is from here.", "warn")
+	else
+		out("It's linked to the Net: you can 'connect " .. net.addr .. "' from anywhere now.", "ok")
+	end
+	emit("hack.jack", { addr = net.addr, devices = count, kind = net.kind, isolated = net.isolated })
 
-	local addr = "local.device." .. device.hash
-	Network.register({
-		addr = addr, name = device.label .. " (local)", org = "unregistered", tier = 1,
-		ice = device.ice, kind = "device", device = device, known = true,
-	})
-	Network.jacked, Network.jackedDevice = addr, device
-	commands.connect.fn({ addr })
-	out("Jacked into " .. device.label:lower() .. ". Controls: " ..
-		table.concat(World.deviceActionsFor(device.kind), ", "))
-	if device.kind == "computer" or device.kind == "terminal" then
-		bridgeCheck(addr, { kind = "computer" })
+	-- some bridge on to closed networks
+	if net.kind == "ap" or (net.kind == "system" and (extra.turrets or 0) > 0) then
+		bridgeCheck(net.addr, { kind = "ap", devices = count, turrets = extra.turrets or 0 })
+	elseif device.kind == "computer" or device.kind == "terminal" then
+		bridgeCheck(net.addr, { kind = "computer" })
 	end
+end)
+
+def("nearby", "nearby", "List the device networks around you: every device is on one.", function()
+	local list, total = DeviceNet.nearby()
+	if total == 0 then out("No devices around you.") return end
+	out(total .. (total == 1 and " device" or " devices") .. " around you, on " .. #list .. (#list == 1 and " network:" or " networks:"), "warn")
+	for _, row in ipairs(list) do
+		local net = row.net
+		out(string.format("  %-26s ICE %d  %-8s %s (%d here)", net.addr, net.ice, net.isolated and "ISOLATED" or "ONLINE",
+			net.name, row.count), Network.isOwned(net.addr) and "ok" or (net.isolated and "err" or "out"))
+	end
+	out("Online networks can be reached from anywhere now. Isolated ones only by jacking into one of their devices.")
+	emit("hack.nearby", { networks = #list, devices = total })
 end)
 
 local function controlAccess(net)

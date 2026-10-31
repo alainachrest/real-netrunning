@@ -26,6 +26,7 @@ function Network.newState()
 		homeFiles = {}, -- documents saved to V's home computers: { name, text }
 		market = nil,   -- created by modules/market on first use
 		gateways = {},  -- closed network addr -> the access point network that bridges to it
+		deviceNets = {}, -- device networks V has found: addr -> { name, kind, ice, isolated, devices }
 	}
 end
 
@@ -71,6 +72,7 @@ function Network.register(def)
 		district = def.district,
 		junk = def.junk,
 		closed = def.closed == true, -- air-gapped: only reachable through its gateway
+		isolated = def.isolated == true, -- a device network with no link to the Net: jack into one of its devices
 		lab = def.lab,               -- secret corporate lab: { code, subject }
 		fs = nil,     -- built on first use
 		floors = nil, -- built on first use
@@ -119,6 +121,14 @@ function Network.build()
 	Network.state.gateways = Network.state.gateways or {}
 	for _, def in pairs(Network.external) do
 		Network.register(def)
+	end
+	-- device networks V has found (modules/devicenet)
+	Network.state.deviceNets = Network.state.deviceNets or {}
+	for addr, d in pairs(Network.state.deviceNets) do
+		local devices = {}
+		for _, x in ipairs(d.devices or {}) do table.insert(devices, { hash = x.hash, kind = x.kind, label = x.label }) end
+		Network.register({ addr = addr, name = d.name, org = "unregistered", tier = 1, ice = d.ice, kind = d.kind,
+			isolated = d.isolated, devices = d.kind ~= "device" and devices or nil, device = d.kind == "device" and devices[1] or nil })
 	end
 	-- networks owned in older versions reveal routes added since
 	for addr in pairs(Network.state.owned) do
@@ -192,6 +202,7 @@ function Network.hasUplink(region)
 end
 
 function Network.canReach(net)
+	if net.isolated then return Network.jacked == net.addr end
 	if net.closed then
 		local gw = Network.state.gateways[net.addr]
 		return gw ~= nil and Network.jacked == gw and Network.bridgeOpen(gw)
@@ -322,7 +333,7 @@ local function buildFloors(net)
 		return floors
 	end
 
-	if net.kind == "ap" then
+	if net.kind == "ap" or net.kind == "system" or net.kind == "mesh" then
 		table.insert(floors, floor("ice", math.max(1, net.ice - 1)))
 		if net.ice >= 3 then table.insert(floors, floor("password", net.ice, { password = rng:pick(passwords) .. rng:int(10, 99) })) end
 		table.insert(floors, floor("files"))

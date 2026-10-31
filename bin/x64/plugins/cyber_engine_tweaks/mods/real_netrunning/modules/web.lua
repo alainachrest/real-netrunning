@@ -453,6 +453,11 @@ local function netPage(addr)
 		if not Network.canReach(net) then
 			p:notice("Closed network. Jack into the device that bridges to it and hack it down to its control floor.", YELLOW)
 		end
+	elseif net.isolated then
+		p:field("Link", "Isolated: no link to the Net", YELLOW)
+		if not Network.canReach(net) then
+			p:notice("Isolated device network. The only way in is to go there and jack into one of its devices.", YELLOW)
+		end
 	elseif not Network.canReach(net) then
 		p:notice("No uplink to " .. Lore.region(net.region).name .. ". Root a backbone that routes there to reach this network.", RED)
 	end

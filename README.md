@@ -53,7 +53,8 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `market` | Stock prices |
 | `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
 | `portfolio` | Your shares and their value |
-| `jack` | Jack into the device you're looking at. Devices wired to an access point join its whole network, and some access points bridge to closed networks |
+| `jack` | Jack into the device you're looking at and join the network it's on. Some access points bridge to closed networks |
+| `nearby` (or `scan nearby`) | List the device networks around you: online ones become reachable from anywhere |
 | `devices` | List the real devices on an access point network (once its control floor is open) |
 | `device <number> <action>` | Control one of them (doors: open, close, lock, unlock; cameras and turrets: on, off). On a single device, just `device <action>` |
 | `fight` | Fight a NetWatch agent that has entered your network |
@@ -115,6 +116,17 @@ Each save also has 48 small networks scattered across Night City's districts: no
 - The public subnet leads to one in each district. Each one you own points to a couple more.
 - They're easy and pay little, but ripperdocs, BD parlours and netrunners' rigs are worth more, and the odd dead node still has something inside.
 - `scan local` lists only these.
+
+## Device networks
+
+Every electronic device in Night City is on a network: doors, cameras, turrets, access points, computers, terminals, vending machines, arcade cabinets, jukeboxes, TVs, radios, speakers, screens, billboards, lights, fans, fuse boxes, alarms, sensors, elevators, and anything else the game counts as a device. `jack` into any of them, or type `nearby` to see what's around you.
+
+- **Access point networks**: devices wired to an access point share its network.
+- **Systems**: devices run by something else, such as a building's security system or a computer that works the doors, share a network with it.
+- **Local meshes**: other devices share a mesh with their neighbours, one per city block (and per few storeys of a building). It might be a storefront network, a building LAN, a security mesh or a street utility grid, depending on what's in it.
+- **Loners**: some devices are on a network of their own. Vending machines, arcade cabinets and old computers often are.
+- **Online or isolated**: some networks are linked to the Net, so once you've found one you can `connect` to it from anywhere. Others are isolated, with no link out at all, and the only way in is to stand there and jack into one of their devices.
+- A device is always on the same network, decided by your save. Networks you've found are kept in your save, and their device lists grow as you find more of their devices. Each one's control floor lets you control its devices (`devices`, `device <n> <action>`): doors open, close, lock and unlock, and everything else switches on and off.
 
 ## Closed networks
 

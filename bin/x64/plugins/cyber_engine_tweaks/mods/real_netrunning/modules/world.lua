@@ -303,16 +303,78 @@ end
 -- Real devices
 ---------------------------------------------------------------------------
 
--- Checked in order; the first class the object is counts.
+-- Every electronic device in the game derives from Device. Checked in order,
+-- most specific first; anything else is a plain "device". psClass is the
+-- device's controller class, for devices found through the device system.
 local deviceKinds = {
-	{ class = "Door",               kind = "door",     label = "Door",              ice = 1 },
-	{ class = "SurveillanceCamera", kind = "camera",   label = "Surveillance camera", ice = 2 },
-	{ class = "SecurityTurret",     kind = "turret",   label = "Security turret",   ice = 3 },
-	{ class = "AccessPoint",        kind = "access",   label = "Access point",      ice = 2 },
-	{ class = "Computer",           kind = "computer", label = "Computer",          ice = 1 },
+	{ class = "Door",                kind = "door",     label = "Door",                ice = 1, psClass = "DoorControllerPS" },
+	{ class = "SurveillanceCamera",  kind = "camera",   label = "Surveillance camera", ice = 2, psClass = "SurveillanceCameraControllerPS" },
+	{ class = "SecurityTurret",      kind = "turret",   label = "Security turret",     ice = 3, psClass = "SecurityTurretControllerPS" },
+	{ class = "AccessPoint",         kind = "access",   label = "Access point",        ice = 2, psClass = "AccessPointControllerPS" },
+	{ class = "Computer",            kind = "computer", label = "Computer",            ice = 1, psClass = "ComputerControllerPS" },
+	{ class = "Terminal",            kind = "terminal", label = "Terminal",            ice = 1, psClass = "TerminalControllerPS" },
+	{ class = "SecurityAlarm",       kind = "alarm",    label = "Security alarm",      ice = 2, psClass = "SecurityAlarmControllerPS" },
+	{ class = "SensorDevice",        kind = "sensor",   label = "Sensor",              ice = 2, psClass = "SensorDeviceControllerPS" },
+	{ class = "VendingMachine",      kind = "vending",  label = "Vending machine",     ice = 1, psClass = "VendingMachineControllerPS" },
+	{ class = "ArcadeMachine",       kind = "arcade",   label = "Arcade machine",      ice = 1, psClass = "ArcadeMachineControllerPS" },
+	{ class = "Jukebox",             kind = "jukebox",  label = "Jukebox",             ice = 1, psClass = "JukeboxControllerPS" },
+	{ class = "TV",                  kind = "tv",       label = "TV",                  ice = 1, psClass = "TVControllerPS" },
+	{ class = "Radio",               kind = "radio",    label = "Radio",               ice = 1, psClass = "RadioControllerPS" },
+	{ class = "Speaker",             kind = "speaker",  label = "Speaker",             ice = 1, psClass = "SpeakerControllerPS" },
+	{ class = "Intercom",            kind = "intercom", label = "Intercom",            ice = 1, psClass = "IntercomControllerPS" },
+	{ class = "LcdScreen",           kind = "screen",   label = "Screen",              ice = 1, psClass = "LcdScreenControllerPS" },
+	{ class = "BillboardDevice",     kind = "billboard", label = "Billboard",          ice = 1, psClass = "BillboardDeviceControllerPS" },
+	{ class = "ElectricLight",       kind = "light",    label = "Light",               ice = 1, psClass = "ElectricLightControllerPS" },
+	{ class = "Fan",                 kind = "fan",      label = "Fan",                 ice = 1, psClass = "FanControllerPS" },
+	{ class = "FuseBox",             kind = "fusebox",  label = "Fuse box",            ice = 1, psClass = "FuseBoxControllerPS" },
+	{ class = "SmartWindow",         kind = "window",   label = "Smart window",        ice = 1, psClass = "SmartWindowControllerPS" },
+	{ class = "LiftDevice",          kind = "elevator", label = "Elevator",            ice = 1, psClass = "LiftControllerPS" },
+	{ class = "Device",              kind = "device",   label = "Device",              ice = 1, psClass = "ScriptableDeviceComponentPS" },
+}
+-- controllers with no device of their own: whole security systems
+local systemKinds = {
+	{ psClass = "SecuritySystemControllerPS", kind = "security", label = "Security system", ice = 3 },
 }
 
 World.deviceKinds = deviceKinds
+
+-- IsA that never throws, even for a class this game version doesn't have.
+local function isA(obj, class)
+	local ok, yes = pcall(function() return obj:IsA(class) end)
+	return ok and yes == true
+end
+
+local function cleanName(name)
+	if type(name) ~= "string" or name == "" then return nil end
+	if name:find("^LocKey") then
+		local ok, text = pcall(GetLocalizedText, name)
+		name = ok and text or nil
+	end
+	if name == nil or name == "" or name:find("^LocKey") or #name > 40 then return nil end
+	return name
+end
+
+local function positionOf(entity)
+	local ok, p = pcall(function() return entity:GetWorldPosition() end)
+	if ok and p then return { x = p.x, y = p.y, z = p.z } end
+	return nil
+end
+
+-- A device entity as a plain table: { id, hash, kind, label, ice, pos }, or nil if it isn't one.
+local function describeDevice(obj)
+	for _, k in ipairs(deviceKinds) do
+		if isA(obj, k.class) then
+			local id = obj:GetEntityID()
+			local info = { id = id, hash = tostring(id.hash), kind = k.kind, label = k.label, ice = k.ice, pos = positionOf(obj) }
+			local ok, name = pcall(function() return obj:GetDevicePS():GetDeviceName() end)
+			name = ok and cleanName(name)
+			if name and name:lower() ~= k.label:lower() then info.label = k.label .. " - " .. name end
+			return info
+		end
+	end
+	return nil
+end
+World.describeDevice = describeDevice
 
 -- Returns info about the device V is looking at, or nil and a reason.
 function World.lookAtDevice()
@@ -321,68 +383,109 @@ function World.lookAtDevice()
 		if player == nil then return nil end
 		local obj = Game.GetTargetingSystem():GetLookAtObject(player, false, false)
 		if obj == nil then return nil end
-		for _, k in ipairs(deviceKinds) do
-			if obj:IsA(k.class) then
-				local id = obj:GetEntityID()
-				return { id = id, hash = tostring(id.hash), kind = k.kind, label = k.label, ice = k.ice }
-			end
-		end
-		return false
+		return describeDevice(obj) or false
 	end)
 	if result == nil then return nil, err or "Look at a device first." end
 	if result == false then return nil, "That isn't a device you can jack into." end
 	return result
 end
 
----------------------------------------------------------------------------
--- Access points and the devices wired to them
----------------------------------------------------------------------------
+-- Every device within `radius` metres of V.
+function World.devicesNear(radius)
+	local list = try(function()
+		local player = Game.GetPlayer()
+		if player == nil then return {} end
+		local query = Game["TSQ_ALL;"]()
+		query.maxDistance = radius
+		query.includeSecondaryTargets = false
+		query.ignoreInstigator = true
+		local ok, parts = Game.GetTargetingSystem():GetTargetParts(player, query)
+		local out, seen = {}, {}
+		if not ok or parts == nil then return out end
+		for _, part in ipairs(parts) do
+			local okEntity, entity = pcall(function() return part:GetComponent(part):GetEntity() end)
+			if okEntity and entity then
+				local info = describeDevice(entity)
+				if info and not seen[info.hash] then
+					seen[info.hash] = true
+					table.insert(out, info)
+				end
+			end
+		end
+		return out
+	end)
+	return list or {}
+end
 
--- Device controller classes, most specific first.
-local psKinds = {
-	{ class = "AccessPointControllerPS",        kind = "access",   label = "Access point" },
-	{ class = "SurveillanceCameraControllerPS", kind = "camera",   label = "Camera" },
-	{ class = "SecurityTurretControllerPS",     kind = "turret",   label = "Turret" },
-	{ class = "DoorControllerPS",               kind = "door",     label = "Door" },
-	{ class = "ComputerControllerPS",           kind = "computer", label = "Computer" },
-	{ class = "TerminalControllerPS",           kind = "terminal", label = "Terminal" },
-}
+-- Rebuilds a device's EntityID from its saved hash (devices remembered across loads).
+function World.entityIdFromHash(hash)
+	local digits = tostring(hash or ""):gsub("%D", "")
+	if digits == "" then return nil end
+	return try(function()
+		return entEntityID.new({ hash = loadstring("return " .. digits .. "ULL", "")() })
+	end)
+end
+
+---------------------------------------------------------------------------
+-- Access points, security systems and the devices wired to them
+---------------------------------------------------------------------------
 
 -- Turns a device controller (PS) into the same shape lookAtDevice returns.
 local function describePS(ps)
 	local id = PersistentID.ExtractEntityID(ps:GetID())
 	local info = { id = id, hash = tostring(id.hash), kind = "device", label = "Device", ice = 1 }
-	for _, k in ipairs(psKinds) do
-		if ps:IsA(k.class) then
-			info.kind, info.label = k.kind, k.label
-			break
+	local matched = false
+	for _, k in ipairs(systemKinds) do
+		if isA(ps, k.psClass) then info.kind, info.label, info.ice, matched = k.kind, k.label, k.ice, true break end
+	end
+	if not matched then
+		for _, k in ipairs(deviceKinds) do
+			if isA(ps, k.psClass) then info.kind, info.label, info.ice = k.kind, k.label, k.ice break end
 		end
 	end
 	local ok, name = pcall(function() return ps:GetDeviceName() end)
-	if ok and type(name) == "string" and name ~= "" and not name:find("^LocKey") then
-		info.label = info.label .. " - " .. name
-	end
+	name = ok and cleanName(name)
+	if name and name:lower() ~= info.label:lower() then info.label = info.label .. " - " .. name end
+	local entity = Game.FindEntityByID(id)
+	if entity then info.pos = positionOf(entity) end
 	return info
+end
+
+local function parentsOf(device)
+	if device.id == nil then return {} end
+	return try(function()
+		local out = {}
+		for _, ps in ipairs(Game.GetDeviceSystem():GetParents(device.id) or {}) do table.insert(out, ps) end
+		return out
+	end) or {}
 end
 
 -- The access point a device is wired to (or the device itself if it is one), or nil.
 function World.accessPointFor(device)
 	if device.kind == "access" then return device end
-	local found = try(function()
-		local parents = Game.GetDeviceSystem():GetParents(device.id)
-		for _, ps in ipairs(parents or {}) do
-			if ps:IsA("AccessPointControllerPS") then return describePS(ps) end
-		end
-		return false
-	end)
-	return found or nil
+	for _, ps in ipairs(parentsOf(device)) do
+		if isA(ps, "AccessPointControllerPS") then return try(describePS, ps) end
+	end
+	return nil
 end
 
--- Every device wired to an access point.
-function World.devicesOn(accessPoint)
+-- Whatever else a device is wired to (a security system, a master switch, a
+-- terminal running doors): the controller, as a device table, or nil.
+function World.controllerFor(device)
+	for _, ps in ipairs(parentsOf(device)) do
+		if not isA(ps, "AccessPointControllerPS") then
+			local info = try(describePS, ps)
+			if info and info.hash ~= device.hash then return info end
+		end
+	end
+	return nil
+end
+
+-- Every device wired to a controller (access point, security system, ...).
+function World.devicesOn(controller)
 	local list = try(function()
 		local out = {}
-		local children = Game.GetDeviceSystem():GetChildren(accessPoint.id)
+		local children = Game.GetDeviceSystem():GetChildren(controller.id)
 		for _, ps in ipairs(children or {}) do
 			local info = describePS(ps)
 			if info.kind ~= "access" then table.insert(out, info) end
@@ -393,6 +496,8 @@ function World.devicesOn(accessPoint)
 end
 
 local function entityFor(device)
+	if device.id == nil and device.hash then device.id = World.entityIdFromHash(device.hash) end
+	if device.id == nil then return nil, "The device is out of range." end
 	local entity = try(function() return Game.FindEntityByID(device.id) end)
 	if entity == nil then return nil, "The device is out of range." end
 	return entity
@@ -454,16 +559,23 @@ end
 
 actions.camera = powerActions("Camera")
 actions.turret = powerActions("Turret")
+-- everything else electronic can at least be switched on and off
+local genericPower = powerActions("Device")
+
+local function actionsFor(kind)
+	if kind == "access" or kind == "security" then return actions[kind] end
+	return actions[kind] or genericPower
+end
 
 function World.deviceActionsFor(kind)
 	local names = {}
-	for name, _ in pairs(actions[kind] or {}) do table.insert(names, name) end
+	for name, _ in pairs(actionsFor(kind) or {}) do table.insert(names, name) end
 	table.sort(names)
 	return names
 end
 
 function World.deviceAction(device, action)
-	local set = actions[device.kind]
+	local set = actionsFor(device.kind)
 	if set == nil or set[action] == nil then
 		return false, "Can't '" .. tostring(action) .. "' a " .. device.label:lower() .. "."
 	end
