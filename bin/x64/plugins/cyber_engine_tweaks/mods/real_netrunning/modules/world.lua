@@ -289,6 +289,13 @@ end
 function World.deleteNPC(id)
 	if id == nil then return end
 	try(function() Game.GetDynamicEntitySystem():DeleteEntity(id) end)
+	World.cyberCall("ClearScannerName", id)
+end
+
+-- What the scanner shows for a spawned NPC: its name and affiliation (Cyberspace.reds).
+function World.setScannerName(id, name, faction)
+	if id == nil or name == nil then return end
+	World.cyberCall("SetScannerName", id, name, faction or "")
 end
 
 -- Moves a spawned NPC (cyberspace hunters go from room to room this way).

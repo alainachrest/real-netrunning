@@ -60,6 +60,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_blockIDs: array<EntityID>;
     private let m_blockSizes: array<Vector4>;
 
+    // what the scanner calls the NPCs Lua spawned (see the NPCPuppet wrap below)
+    private let m_scanIDs: array<EntityID>;
+    private let m_scanNames: array<String>;
+    private let m_scanFactions: array<String>;
+
     public static func Get() -> ref<RNCyberspaceSystem> {
         return GameInstance.GetScriptableSystemsContainer(GetGameInstance())
             .Get(n"RealNetrunning.RNCyberspaceSystem") as RNCyberspaceSystem;
@@ -333,6 +338,48 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // kind 4: a light (no collider, nothing to see): the room's own glow
     // kind 5: particles (no collider; Lua adds the particle system)
     // kind 10 and up: a marker (no collider): hx is its size (see RNMarker*)
+    // --- scanner names ------------------------------------------------------
+
+    public func SetScannerName(id: EntityID, name: String, faction: String) {
+        let i = this.FindScannerName(id);
+        if i >= 0 {
+            this.m_scanNames[i] = name;
+            this.m_scanFactions[i] = faction;
+            return;
+        }
+        ArrayPush(this.m_scanIDs, id);
+        ArrayPush(this.m_scanNames, name);
+        ArrayPush(this.m_scanFactions, faction);
+        while ArraySize(this.m_scanIDs) > 64 {
+            ArrayErase(this.m_scanIDs, 0);
+            ArrayErase(this.m_scanNames, 0);
+            ArrayErase(this.m_scanFactions, 0);
+        }
+    }
+
+    public func ClearScannerName(id: EntityID) {
+        let i = this.FindScannerName(id);
+        if i >= 0 {
+            ArrayErase(this.m_scanIDs, i);
+            ArrayErase(this.m_scanNames, i);
+            ArrayErase(this.m_scanFactions, i);
+        }
+    }
+
+    public func FindScannerName(id: EntityID) -> Int32 {
+        let i = 0;
+        while i < ArraySize(this.m_scanIDs) {
+            if Equals(this.m_scanIDs[i], id) {
+                return i;
+            }
+            i += 1;
+        }
+        return -1;
+    }
+
+    public func ScannerNameAt(i: Int32) -> String { return this.m_scanNames[i]; }
+    public func ScannerFactionAt(i: Int32) -> String { return this.m_scanFactions[i]; }
+
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
         let rotation: EulerAngles;
@@ -741,4 +788,38 @@ private func HandleQuickSave() {
         return;
     }
     wrappedMethod();
+}
+
+// The scanner shows cyberspace NPCs as what they are in the Net (ICE, a rogue
+// AI construct, a NetWatch agent, a gang's netrunner), not the game character
+// they were spawned from: after the game fills in the scan, the name and
+// affiliation are replaced for the NPCs Lua named.
+@wrapMethod(NPCPuppet)
+public const func CompileScannerChunks() -> Bool {
+    let ok = wrappedMethod();
+    if !ok {
+        return ok;
+    }
+    let system = RNCyberspaceSystem.Get();
+    if !IsDefined(system) {
+        return ok;
+    }
+    let i = system.FindScannerName(this.GetEntityID());
+    if i < 0 {
+        return ok;
+    }
+    let board = GameInstance.GetBlackboardSystem(this.GetGame()).Get(GetAllBlackboardDefs().UI_ScannerModules);
+    if !IsDefined(board) {
+        return ok;
+    }
+    let name = new ScannerName();
+    name.Set(system.ScannerNameAt(i));
+    board.SetVariant(GetAllBlackboardDefs().UI_ScannerModules.ScannerName, ToVariant(name));
+    let faction = system.ScannerFactionAt(i);
+    if StrLen(faction) > 0 {
+        let chunk = new ScannerFaction();
+        chunk.Set(faction);
+        board.SetVariant(GetAllBlackboardDefs().UI_ScannerModules.ScannerFaction, ToVariant(chunk));
+    }
+    return ok;
 }

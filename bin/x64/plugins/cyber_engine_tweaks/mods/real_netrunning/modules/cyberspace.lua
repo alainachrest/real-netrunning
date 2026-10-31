@@ -908,13 +908,44 @@ end
 -- ICE and NetWatch in person
 ---------------------------------------------------------------------------
 
+-- What the scanner calls something that belongs to `who` (an org id, or one of
+-- NetWatch / a rogue AI): name, affiliation.
+local function scanLabelFor(who, role)
+	if who == "rogueai" then return "Rogue AI construct", "Beyond the Blackwall" end
+	if who == "netwatch" then return "NetWatch agent", "NetWatch" end
+	local org = Lore.getOrg(who)
+	return org.name .. " " .. role, org.name
+end
+
+local function scanLabel(h)
+	if h.kind == "patrol" then return scanLabelFor(h.holder, "ICE") end
+	if h.kind == "raider" then return scanLabelFor(h.attacker, "netrunner") end
+	if h.kind == "rogue" then return "Rogue AI", "Beyond the Blackwall" end
+	if h.kind == "agent" then return "NetWatch agent", "NetWatch" end
+	if h.kind == "rival" then return "Rival netrunner", "Freelance" end
+	return nil
+end
+
+-- The gate's ICE, named for whoever holds the network now.
+local function iceLabel(lock)
+	local holder = Territory.holder(Cyber.addr) or (Network.get(Cyber.addr) or {}).org
+	local name, faction = scanLabelFor(holder, lock.kind == "black" and "Black ICE" or "ICE")
+	if holder == "rogueai" or holder == "netwatch" then name = lock.kind == "black" and "Black ICE" or "ICE" end
+	return name, faction
+end
+
 local function spawnIce(i)
 	local floor = Cyber.floors[i]
 	local lock = lockAfter(i)
 	if floor == nil or not isIceLock(lock) or #floor.ice > 0 or floor.iceCleared then return end
 	local net = Network.get(Cyber.addr)
-	local org = Lore.getOrg(net.org)
-	local record = Kit.iceRecord(net.org, org, lock.kind == "black")
+	local holder = Territory.holder(net.addr) or net.org
+	local org = Lore.getOrg(holder)
+	local record = Kit.iceRecord(holder, org, lock.kind == "black")
+	if lock.kind ~= "black" then
+		if holder == "rogueai" then record = Kit.rogueAI[math.floor(roll() * #Kit.rogueAI) + 1] or Kit.rogueAI[1]
+		elseif holder == "netwatch" then record = Kit.netwatch end
+	end
 	local count = 1 + math.floor(lock.ice / 3)
 	local spot = floor.iceSpot
 	local x, y, z
@@ -922,6 +953,7 @@ local function spawnIce(i)
 	for k = 1, count do
 		local offset = (k - (count + 1) / 2) * 2.5
 		local id = World.spawnNPC(fighterRecord(record), x + offset, y + offset * 0.3, z + 0.2, 180)
+		if id ~= nil then World.setScannerName(id, iceLabel(lock)) end
 		if id ~= nil then table.insert(floor.ice, id) floor.iceRecords = floor.iceRecords or {} floor.iceRecords[id] = fighterRecord(record) end
 	end
 	say((lock.kind == "black" and "BLACK ICE" or "ICE") .. " materialises in front of the sealed doorway. " ..
@@ -948,6 +980,7 @@ local function updateIce(dt)
 				World.deleteNPC(id)
 				local newRec = fighterRecord(rec)
 				local newId = p and World.spawnNPC(newRec, p.x, p.y, p.z, 180)
+				if newId then World.setScannerName(newId, iceLabel(lockAfter(Cyber.floor) or { kind = "ice" })) end
 				if newId then
 					floor.ice[k], floor.iceRecords[newId], floor.iceHostile[k] = newId, newRec, false
 				end
@@ -1077,6 +1110,7 @@ local function spawnHunter(h, room, from)
 		h.actualRecord = fighterRecord(h.record)
 		h.id = World.spawnNPC(h.actualRecord, x, y, floor.z + 0.2, yaw)
 		h.hostile, h.disarmed = false, 0
+		if h.id then World.setScannerName(h.id, scanLabel(h)) end
 		return h.id ~= nil
 	end
 	return World.moveNPC(h.id, x, y, floor.z + 0.2, yaw)
@@ -1137,7 +1171,7 @@ local function spawnPatrols(i)
 		local record = Kit.iceRecord(holder, org, false)
 		if holder == "rogueai" then record = Kit.rogueAI[math.floor(roll() * #Kit.rogueAI) + 1] or Kit.rogueAI[1]
 		elseif holder == "netwatch" then record = Kit.netwatch end
-		addHunter("patrol", record, i, farRoom(i, 3, true))
+		addHunter("patrol", record, i, farRoom(i, 3, true), { holder = holder })
 	end
 end
 
@@ -1343,7 +1377,7 @@ local function updateRaid(dt)
 			local record, name = Kit.iceRecord(a.attacker, org, false), org.name .. " netrunner"
 			if a.attacker == "rogueai" then record, name = Kit.rogueAI[math.floor(roll() * #Kit.rogueAI) + 1] or Kit.rogueAI[1], "a rogue AI construct"
 			elseif a.attacker == "netwatch" then record, name = Kit.netwatch, "a NetWatch agent" end
-			if addHunter("raider", record, Cyber.floor, farRoom(Cyber.floor, 2, false), { name = name }) then spawned = spawned + 1 end
+			if addHunter("raider", record, Cyber.floor, farRoom(Cyber.floor, 2, false), { name = name, attacker = a.attacker }) then spawned = spawned + 1 end
 		end
 		if spawned > 0 then
 			if a.raid then
