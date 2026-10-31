@@ -355,33 +355,35 @@ end
 -- handsOnly: only take what it's holding right now, leaving its inventory alone.
 -- Returns how many weapons were removed (0 once it's unarmed), or nil if it isn't there yet.
 function World.disarm(id, keep, handsOnly)
-	local function kept(itemID)
-		if keep == nil then return false end
-		local ok, name = pcall(itemTypeName, itemID)
-		if not ok or name == nil then return false end
-		for _, k in ipairs(keep) do if k == name then return true end end
-		return false
+	-- Only guns go: anything tagged as a ranged weapon. Everything else (fists,
+	-- Gorilla Arms) stays, so the NPC still has something to fight with. Going
+	-- by item type to spare the fists took them too, and left NPCs passive.
+	local function isGun(itemID)
+		local ok, yes = pcall(function()
+			local record = TweakDBInterface.GetItemRecord(itemID:GetTDBID())
+			return record ~= nil and record:TagsContains("RangedWeapon")
+		end)
+		return ok and yes == true
 	end
 	return try(function()
 		local npc = Game.FindEntityByID(id)
 		if npc == nil then return nil end
 		local ts = Game.GetTransactionSystem()
-		local ok, items = ts:GetItemList(npc)
-		if not ok or items == nil then return nil end
 		local removed = 0
-		-- whatever is already in its hands first
 		for _, slot in ipairs({ "AttachmentSlots.WeaponRight", "AttachmentSlots.WeaponLeft" }) do
 			pcall(function()
 				local item = ts:GetItemInSlot(npc, TweakDBID.new(slot))
-				if item and not kept(item:GetItemID()) then
+				if item and isGun(item:GetItemID()) then
 					ts:RemoveItem(npc, item:GetItemID(), 1)
 					removed = removed + 1
 				end
 			end)
 		end
 		if handsOnly then return removed end
+		local ok, items = ts:GetItemList(npc)
+		if not ok or items == nil then return removed end
 		for _, data in ipairs(items) do
-			if data:HasTag("Weapon") and not kept(data:GetID()) then
+			if isGun(data:GetID()) then
 				ts:RemoveItem(npc, data:GetID(), data:GetQuantity())
 				removed = removed + 1
 			end
