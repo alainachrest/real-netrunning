@@ -311,6 +311,8 @@ function World.npcPosition(id)
 	end)
 end
 
+World.seenHealthy = {}
+
 -- true dead, false alive, nil not spawned (yet). Down counts as dead: a
 -- defeated NPC, or one with no health left (some NPCs drop "defeated" instead
 -- of dying). A stunned one that will get back up still counts as alive.
@@ -321,9 +323,14 @@ function World.npcDead(id)
 		if npc:IsDead() then return "dead" end
 		local down = false
 		pcall(function() if npc:IsDefeated() then down = true end end)
+		-- health reads 0 for a moment while an NPC spawns, so no health only
+		-- counts once it has been seen with some
 		pcall(function()
 			local hp = Game.GetStatPoolsSystem():GetStatPoolValue(npc:GetEntityID(), gamedataStatPoolType.Health, true)
-			if type(hp) == "number" and hp <= 0.5 then down = true end
+			if type(hp) ~= "number" then return end
+			local key = tostring(id.hash or id)
+			if hp > 1 then World.seenHealthy[key] = true
+			elseif hp <= 0.5 and World.seenHealthy[key] then down = true end
 		end)
 		return down and "dead" or "alive"
 	end)
