@@ -64,43 +64,12 @@ local Cyber = {
 }
 
 local function roll() return Cyber.random and Cyber.random() or math.random() end
--- Keeps a spawned enemy fighting like V (quickhacks and bare hands). Its whole
--- inventory is swept for the first few seconds; after that only a gun or blade
--- actually in its hands is taken, every couple of seconds, so its AI isn't
--- interrupted all the time (that stopped enemies fighting at all).
+-- Keeps a spawned enemy fighting like V: fists and Gorilla Arms only. Some of
+-- the brawlers carry a sidearm they pull once a fight starts, so every guns
+-- and blades are taken from their hands and their pockets every half second;
+-- their fists are left alone, so they keep fighting.
 local function keepDisarmed(id, dt)
-	Cyber.armory = Cyber.armory or {}
-	local s = Cyber.armory[id]
-	if s == nil then s = { sweeps = 0, wait = 0 } Cyber.armory[id] = s end
-	if s.sweeps < 6 then
-		World.disarm(id, Kit.allowedWeapons)
-		s.sweeps = s.sweeps + 1
-		return
-	end
-	s.wait = s.wait - (dt or 0.5)
-	if s.wait > 0 then return end
-	s.wait = 2.0
-	World.disarm(id, Kit.allowedWeapons, true)
-end
-
--- The jack-in/out effect: spawned around V for a few seconds.
-local function playTransition(x, y, z)
-	if Kit.templates.transition == nil then return end
-	local id = World.spawnProp(Kit.templates.transition, x, y, z, 0)
-	if id then
-		Cyber.transitions = Cyber.transitions or {}
-		table.insert(Cyber.transitions, { id = id, timer = 5.0 })
-	end
-end
-
-function Cyber.updateTransitions(dt)
-	if Cyber.transitions == nil then return end
-	local kept = {}
-	for _, t in ipairs(Cyber.transitions) do
-		t.timer = t.timer - dt
-		if t.timer <= 0 then World.despawnProp(t.id) else table.insert(kept, t) end
-	end
-	Cyber.transitions = kept
+	World.disarm(id, Kit.allowedWeapons)
 end
 
 local function emit(event, data) if Cyber.bus then Cyber.bus.emit(event, data) end end
