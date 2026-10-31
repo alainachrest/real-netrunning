@@ -276,10 +276,18 @@ local function floorFiles(net, i, f)
 		for _, name in ipairs(names) do
 			local child = node.children[name]
 			if child.dir then walk(child, path .. "/" .. name)
-			elseif #list < 12 then table.insert(list, { path = path .. "/" .. name, node = child }) end
+			else table.insert(list, { path = path .. "/" .. name, node = child }) end
 		end
 	end
 	if root then walk(root, "/" .. folder) end
+	-- a room holds 12 at most: paydata and bank accounts first, then the rest in order
+	local function rank(file) return file.node.paydata and 0 or (file.node.bank and 1 or 2) end
+	for i, file in ipairs(list) do file.order = i end
+	table.sort(list, function(a, b)
+		if rank(a) ~= rank(b) then return rank(a) < rank(b) end
+		return a.order < b.order
+	end)
+	while #list > 12 do table.remove(list) end
 	return list
 end
 
@@ -343,7 +351,19 @@ local function fileLabel(net, file)
 	local name = file.path:match("([^/]+)$")
 	if file.node.paydata then
 		if Network.state.looted[net.addr .. ":" .. file.path] then return name .. " (already taken)" end
-		return name .. " - paydata, ~" .. file.node.paydata .. " eddies"
+		if file.node.bank then
+		local st = Network.state.banks and Network.state.banks[net.addr .. ":" .. file.path]
+		if st and st.drained then return name .. " (emptied)" end
+		if st and st.frozen then return name .. " (frozen)" end
+		return name .. " - bank account, " .. file.node.bank.balance .. " eddies"
+	end
+	return name .. " - paydata, ~" .. file.node.paydata .. " eddies"
+	end
+	if file.node.bank then
+		local st = Network.state.banks and Network.state.banks[net.addr .. ":" .. file.path]
+		if st and st.drained then return name .. " (emptied)" end
+		if st and st.frozen then return name .. " (frozen)" end
+		return name .. " - bank account, " .. file.node.bank.balance .. " eddies"
 	end
 	return name
 end
@@ -861,6 +881,10 @@ function Cyber.use()
 			o.label = fileLabel(net, o)
 			showObject(o)
 			World.notify("Downloaded " .. o.path:match("([^/]+)$"))
+		elseif o.node.bank then
+			Cyber.run("bank " .. o.path)
+			o.label = fileLabel(net, o)
+			Cyber.openDeck()
 		else
 			Cyber.run("cat " .. o.path)
 			Cyber.openDeck()

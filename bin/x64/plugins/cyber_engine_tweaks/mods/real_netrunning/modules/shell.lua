@@ -7,6 +7,7 @@ local Market = require("modules/market")
 local Rng = require("modules/rng")
 local NetWatch = require("modules/netwatch")
 local DeviceNet = require("modules/devicenet")
+local Junk = require("modules/junk")
 
 local Shell = {
 	lines = {},        -- { text, kind } kind = "out" | "cmd" | "ok" | "warn" | "err"
@@ -287,6 +288,45 @@ def("map", "map", "Show the network's floors and what blocks the way.", function
 	end
 end)
 
+def("routes", "routes", "Where this network leads: routes you've found from it, and how many are still hidden.", function()
+	local net = current()
+	if net == nil then out("Connect to a network first.", "err") return end
+	local owned = Network.isOwned(net.addr)
+	local found, hidden = {}, 0
+	for _, addr in ipairs(net.reveals or {}) do
+		local r = Network.get(addr)
+		if r then
+			if Network.isKnown(addr) then table.insert(found, r) else hidden = hidden + 1 end
+		end
+	end
+	local bridged = {}
+	for closedAddr, gw in pairs(Network.state.gateways or {}) do
+		local r = Network.get(closedAddr)
+		if gw == net.addr and r and Network.isKnown(closedAddr) then table.insert(bridged, r) end
+	end
+	table.sort(bridged, function(a, b) return a.addr < b.addr end)
+	out("ROUTES FROM " .. net.name:upper(), "warn")
+	local nothing = #found == 0 and #bridged == 0 and not net.uplink and (hidden == 0 or owned)
+	if nothing then out("  Nothing leads on from here.") return end
+	if #found == 0 and #bridged == 0 then out("  None found yet.") end
+	for _, r in ipairs(found) do
+		local org = Lore.getOrg(r.org)
+		out(string.format("  %-34s ICE %d  %-6s %s", r.addr, r.ice, progress(r), r.name .. (r.junk and "" or (" [" .. org.name .. "]"))),
+			Network.isOwned(r.addr) and "ok" or (Network.canReach(r) and "out" or "err"))
+	end
+	for _, r in ipairs(bridged) do
+		out(string.format("  %-34s ICE %d  %-6s %s", r.addr, r.ice, progress(r), r.name .. "  (bridge: " ..
+			(Network.bridgeOpen(net.addr) and "open" or "open the control floor") .. ")"),
+			Network.isOwned(r.addr) and "ok" or "out")
+	end
+	if net.uplink then
+		out("  Uplink to " .. Lore.region(net.uplink).name .. (owned and " (yours)" or ": take root here to use it"), owned and "ok" or "warn")
+	end
+	if hidden > 0 then
+		out("  " .. hidden .. " more route" .. (hidden == 1 and "" or "s") .. " hidden. Take root here to find " .. (hidden == 1 and "it." or "them."), "warn")
+	end
+end)
+
 local function startJob(kind, net, index, f, duration, traceTotal)
 	local power = World.deckPower()
 	Shell.job = {
@@ -459,6 +499,67 @@ def("leak", "leak <file>", "Leak paydata to the press (crashes the owner's stock
 	Network.addHeat(5, "leak from " .. net.addr)
 	emit("hack.leak", { addr = net.addr, org = net.org, ticker = company.ticker, tier = net.tier })
 	addTrace(10)
+end)
+
+-- Bank accounts in people's home folders (modules/junk).
+local function bankState(key)
+	Network.state.banks = Network.state.banks or {}
+	local st = Network.state.banks[key]
+	if st == nil then st = { strikes = 0 } Network.state.banks[key] = st end
+	return st
+end
+Shell.bankState = function(key) return Network.state.banks and Network.state.banks[key] end
+
+local function drainAccount(net, key, b, how)
+	local st = bankState(key)
+	st.drained = true
+	World.giveMoney(b.balance)
+	out("Transferred " .. Junk.eddies(b.balance) .. " eddies out of " .. b.holder .. "'s " .. b.name ..
+		" account, through a chain of shell accounts.", "ok")
+	World.notify("Bank transfer: " .. b.balance .. " eddies")
+	Network.addHeat(b.security >= 3 and 3 or 1, "emptied a bank account on " .. net.addr)
+	emit("hack.bank", { addr = net.addr, org = net.org, value = b.balance, bank = b.name, how = how, tier = net.tier })
+	addTrace(5)
+end
+
+local function bankStrike(net, key, b, text)
+	local st = bankState(key)
+	st.strikes = (st.strikes or 0) + 1
+	if st.strikes >= 3 then
+		st.frozen = true
+		out(text .. " " .. b.name .. " froze the account.", "err")
+		Network.addHeat(2, "tripped a bank's fraud alarm on " .. net.addr)
+	else
+		out(text .. " (" .. (3 - st.strikes) .. " more and the bank freezes the account)", "err")
+	end
+	addTrace(10)
+end
+
+def("bank", "bank <file> [pin]", "Empty a bank account file: with its PIN, or brute-force it with your deck.", function(args)
+	local net = needConnection() if not net then return end
+	if not args[1] then out("Usage: bank <file> [pin]", "err") return end
+	local node, path = Network.resolve(net, Shell.cwd, args[1])
+	if node == nil or node.dir then out("No such file.", "err") return end
+	if not checkFloor(net, path) then return end
+	local b = node.bank
+	if b == nil then out("That isn't a bank account.") return end
+	local key = net.addr .. ":" .. path
+	local st = bankState(key)
+	if st.drained then out("Already emptied.") return end
+	if st.frozen then out(b.name .. " froze this account.", "err") return end
+	if args[2] then
+		if args[2] == b.pin then drainAccount(net, key, b, "pin")
+		else bankStrike(net, key, b, "Wrong PIN.") end
+		return
+	end
+	if NetWatch.lockout > 0 then out("Your deck is still rebooting (" .. math.ceil(NetWatch.lockout) .. "s).", "err") return end
+	if Shell.job then out("A job is already running.", "err") return end
+	local power = World.deckPower()
+	if power <= 0 then out("You need a cyberdeck installed to brute-force an account.", "err") return end
+	local duration = 4 + b.security * 2
+	Shell.job = { kind = "bank", addr = net.addr, key = key, path = path, elapsed = 0, duration = duration,
+		power = power, security = b.security, traceTotal = (12 + b.security * 6) * Network.lag(net), traced = 0 }
+	out(string.format("Brute-forcing %s's %s PIN with deck power %d... (%ds)", b.holder, b.name, power, duration), "warn")
 end)
 
 local function money(n) return string.format("%.2f", n) end
@@ -672,9 +773,22 @@ function Shell.prompt()
 	return (Shell.connected and (Shell.connected .. ":" .. Shell.cwd) or "deck") .. ">"
 end
 
+local function finishBank(job, net)
+	local node = Network.resolve(net, "/", job.path)
+	local b = node and node.bank
+	if b == nil then return end
+	local st = bankState(job.key)
+	if st.drained or st.frozen then return end
+	local chance = math.max(0.15, math.min(0.95, 0.5 + 0.15 * (job.power - job.security)))
+	local roll = Shell.random and Shell.random() or math.random()
+	if roll < chance then drainAccount(net, job.key, b, "brute force")
+	else bankStrike(net, job.key, b, "PIN crack failed. The bank's ICE bounced you.") end
+end
+
 local function finishJob(job)
 	local net = Network.get(job.addr)
 	if net == nil then return end
+	if job.kind == "bank" then finishBank(job, net) return end
 	local f = Network.floors(net)[job.floor]
 	local index = Network.nextLock(net.addr)
 	if f == nil or index ~= job.floor then return end

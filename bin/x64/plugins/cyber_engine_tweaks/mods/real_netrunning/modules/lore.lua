@@ -268,6 +268,7 @@ local firstNames = { "Ana", "Bo", "Carlos", "Dmitri", "Esme", "Faye", "Gus", "Ha
 	"Marisol", "Nate", "Oda", "Priya", "Quinn", "Rico", "Sun", "Tomas", "Uma", "Vic", "Wen", "Yara", "Zed" }
 local surnames = { "Alvarez", "Brandt", "Cho", "Doyle", "Estrada", "Fujita", "Garza", "Hayes", "Ito", "Jensen",
 	"Kowal", "Lima", "Mbeki", "Nakamura", "Okafor", "Petrov", "Reyes", "Silva", "Tran", "Vance", "Wu", "Yilmaz" }
+Lore.firstNames, Lore.surnames = firstNames, surnames
 local handles = { "glitch", "zero_k", "nyx", "static", "byte_saint", "hexmara", "ghostline", "redshift", "null_ptr",
 	"kitsune", "datawitch", "lowkey", "sable", "rust_angel" }
 

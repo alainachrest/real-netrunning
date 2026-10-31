@@ -5,6 +5,7 @@
 local Lore = require("modules/lore")
 local Rng = require("modules/rng")
 local Core = require("modules/core")
+local Junk = require("modules/junk")
 
 local Network = {
 	nets = {},     -- addr -> network
@@ -27,6 +28,7 @@ function Network.newState()
 		homeFiles = {}, -- documents saved to V's home computers: { name, text }
 		market = nil,   -- created by modules/market on first use
 		gateways = {},  -- closed network addr -> the access point network that bridges to it
+		banks = {},      -- "addr:path" -> { strikes, drained, frozen } for bank account files
 		deviceNets = {}, -- device networks V has found: addr -> { name, kind, ice, isolated, devices }
 	}
 end
@@ -507,6 +509,71 @@ local function addFile(root, path, file)
 	node.children[parts[#parts]] = file
 end
 
+-- Like addFile, but never replaces a file already there (adds -2, -3... to the name).
+local function addNew(root, path, file)
+	local node = root
+	for part in path:gmatch("([^/]+)/") do node = node.children and node.children[part] if node == nil then break end end
+	local name = path:match("([^/]+)$")
+	if node and node.children and node.children[name] then
+		local base, ext = name:match("^(.-)(%.[^.]*)$")
+		base, ext = base or name, ext or ""
+		local n = 2
+		while node.children[base .. "-" .. n .. ext] do n = n + 1 end
+		path = path:sub(1, #path - #name) .. base .. "-" .. n .. ext
+	end
+	addFile(root, path, file)
+end
+
+-- The people who use a computer: a couple of names besides the admin account.
+local function computerUsers(net)
+	local rng = Rng.new(Network.state.seed or 0, "pcusers", net.addr)
+	local users = { "admin" }
+	for _ = 1, rng:int(1, 2) do
+		local u = (rng:pick(Lore.firstNames):sub(1, 1) .. "." .. rng:pick(Lore.surnames)):lower()
+		if u ~= users[#users] then table.insert(users, u) end
+	end
+	return users
+end
+
+local NO_BANK_TONES = { device = true, vending = true, transit = true }
+
+-- Clutter, home folders and bank accounts (modules/junk), from their own random
+-- stream so the rest of a network's files stay exactly as they were.
+local function addClutter(net, root, floors, users, org)
+	if net.kind == "site" then return end
+	local home = net.kind == "computer" and net.addr:find("^home%.") ~= nil -- V's own computers
+	local rng = Rng.new(Network.state.seed or 0, "clutter", net.addr)
+	-- a computer belongs to whoever sits at it, not to the device network around it
+	local tone = net.tone or (net.kind == "computer" and "residential") or org.tone
+	local ctx = {
+		name = net.name, org = org, tone = tone, tier = net.tier, users = users,
+		bank = not home and not NO_BANK_TONES[tone] and net.kind ~= "ap" and net.kind ~= "system"
+			and net.kind ~= "mesh" and net.kind ~= "device",
+	}
+	local homesDone = false
+	for i, f in ipairs(floors) do
+		local dir = Network.floorFolder(i, f)
+		local function add(path, file) addNew(root, dir .. "/" .. path, file) end
+		if f.kind == "lobby" then
+			if not home then Junk.lobby(rng, add, ctx) end
+		elseif f.kind == "ice" or f.kind == "black" then
+			Junk.ice(rng, add)
+		elseif f.kind == "password" then
+			Junk.gate(rng, add)
+		elseif f.kind == "control" then
+			Junk.control(rng, add)
+		elseif f.kind == "core" then
+			Junk.core(rng, add)
+		elseif f.kind == "files" then
+			if not home then Junk.shared(rng, add, ctx) end
+			if not homesDone and not home then
+				homesDone = true
+				for _, u in ipairs(users) do Junk.home(rng, add, ctx, u) end
+			end
+		end
+	end
+end
+
 local function buildFs(net)
 	local org = Lore.getOrg(net.org)
 	local rng = Rng.new(Network.state.seed or 0, "fs", net.addr)
@@ -514,7 +581,7 @@ local function buildFs(net)
 	local floors = Network.floors(net)
 
 	local users = {}
-	for _, u in ipairs(net.users or org.users) do
+	for _, u in ipairs(net.users or (net.kind == "computer" and computerUsers(net)) or org.users) do
 		if rng:chance(0.7) or #users == 0 then table.insert(users, u) end
 	end
 
@@ -602,6 +669,7 @@ local function buildFs(net)
 		end
 	end
 
+	addClutter(net, root, floors, users, org)
 	return root
 end
 

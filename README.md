@@ -44,12 +44,14 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `uplinks` | Which regions beyond Night City you can reach, and what to root to reach the rest |
 | `connect <address>` | Connect to a network |
 | `map` | Show the network's floors and what blocks each one |
+| `routes` | Where the network you're connected to leads: the routes you've found from it (and closed networks it bridges to), and how many are still hidden until you take root |
 | `breach` | Break the ICE on the next locked floor (raises trace) |
 | `password <code>` | Open a password gate (codes hide in mail on earlier floors) |
 | `crack` | Brute-force a password gate instead (slow, raises trace) |
 | `ls`, `cd`, `cat` | Browse and read files once you have access |
 | `download <file>` | Sell paydata for eddies (corporate data may carry an insider tip) |
 | `leak <file>` | Leak paydata to the press: the owner's stock crashes, the journalist pays a little |
+| `bank <file> [pin]` | Empty a bank account file (`.acct`) into your wallet: with its PIN, or leave the PIN off to brute-force it with your deck |
 | `market` | Stock prices |
 | `buy <ticker> <qty>`, `sell <ticker> <qty or all>` | Trade shares (1% fee) |
 | `portfolio` | Your shares and their value |
@@ -68,6 +70,9 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Small networks (single devices, computers) leave their core unguarded, but you still have to reach it: walk down and use it in cyberspace, or `breach` it (instant) or `cd` into it from the deck. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
 - Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually headquarters around the world and in orbit.
 - Progress through each network's floors is saved, so you can come back and carry on.
+- Networks are full of the things people leave lying around: notices in the lobby, daemon logs behind the ICE, attempt logs at password gates, memos and temp files in shared folders, diagnostics on control floors, backups and audit logs in the core. The same goes for the files on computers.
+- **User accounts**: the first files floor has a home folder for each user, with their mail (work, personal and plenty of spam), notes, downloads, photos and deleted files. Real people (not service accounts like `secops`) sometimes keep a bank account there.
+- **Bank accounts**: `cat` an `.acct` file to see the bank and balance, then `bank <file> <pin>` to empty it. Careless owners leave the PIN in a reset email from their bank or a `pins.txt`. Without it, `bank <file>` brute-forces the PIN with your deck, which takes time and raises trace. Three wrong PINs or failed cracks and the bank freezes the account. Corporate staff keep the most, and emptying their accounts draws more NetWatch heat. In cyberspace, using an account object starts the brute force. V's own home computers have none.
 - Deck power comes from the tier of the cyberdeck V has installed, as in Much Better Netrunning: Common 1, Uncommon 2, Rare 3, Epic 4, Legendary 5, Legendary+ and ++ 6. Without a cyberdeck you can't `breach` or `crack` at all.
 - A deck can only `breach` ICE up to one level above its own power (a Common deck handles ICE 2, Epic handles ICE 5), and a stronger deck breaks ICE faster and more reliably. ICE beyond your deck can still be fought in person in cyberspace. `status` shows your deck and its tier.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
