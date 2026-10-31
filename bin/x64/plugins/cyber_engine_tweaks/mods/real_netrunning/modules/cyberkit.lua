@@ -44,6 +44,10 @@ Kit.templates = {
 	floor          = "base\\worlds\\03_night_city\\sectors\\c_city_center\\corpo_plaza\\loc_q116_mikoshi_cyberspace\\mikoshi_plates.ent",
 	floorCore      = "base\\quest\\main_quests\\part1\\q116\\entities\\q116_cyberspace_well_floor.ent",
 
+	-- played around V for a few seconds on jacking in and out (the game's own
+	-- "leaving cyberspace" effect from Transmission)
+	transition     = "base\\fx\\quest\\q114\\simulation\\leave_cyberspace_bathtub_sim.ent",
+
 	-- cyberspace particles drifting through every room
 	roomParticles  = "base\\fx\\meshes\\cyberparticles\\cyberparticles.ent",
 

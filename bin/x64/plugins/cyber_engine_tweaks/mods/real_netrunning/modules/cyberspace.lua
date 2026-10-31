@@ -83,6 +83,26 @@ local function keepDisarmed(id, dt)
 	World.disarm(id, Kit.allowedWeapons, true)
 end
 
+-- The jack-in/out effect: spawned around V for a few seconds.
+local function playTransition(x, y, z)
+	if Kit.templates.transition == nil then return end
+	local id = World.spawnProp(Kit.templates.transition, x, y, z, 0)
+	if id then
+		Cyber.transitions = Cyber.transitions or {}
+		table.insert(Cyber.transitions, { id = id, timer = 5.0 })
+	end
+end
+
+function Cyber.updateTransitions(dt)
+	if Cyber.transitions == nil then return end
+	local kept = {}
+	for _, t in ipairs(Cyber.transitions) do
+		t.timer = t.timer - dt
+		if t.timer <= 0 then World.despawnProp(t.id) else table.insert(kept, t) end
+	end
+	Cyber.transitions = kept
+end
+
 local function emit(event, data) if Cyber.bus then Cyber.bus.emit(event, data) end end
 local function say(text, kind) Cyber.print(text, kind or "out") end
 
@@ -669,7 +689,10 @@ function Cyber.jackOut(reason, quiet)
 	Cyber.lastDebug = Cyber.debug()
 	clear()
 	local body = Cyber.body
-	if body then World.teleport(body.x, body.y, body.z + 0.1, body.yaw) end
+	if body then
+		World.teleport(body.x, body.y, body.z + 0.1, body.yaw)
+		playTransition(body.x, body.y, body.z)
+	end
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
 	World.removeStatusEffect(Kit.holsterEffect)
 	World.setJackedIn(false)
@@ -1417,6 +1440,7 @@ local function updateBody(dt)
 end
 
 function Cyber.update(dt)
+	Cyber.updateTransitions(dt)
 	if Cyber.pendingRecover then
 		Cyber.pendingRecover = Cyber.pendingRecover - dt
 		if Cyber.pendingRecover <= 0 then
@@ -1472,6 +1496,7 @@ function Cyber.update(dt)
 			Cyber.arrived = true
 			if Cyber.phase == "moving" then
 				Cyber.phase = "in"
+				playTransition(pos.x, pos.y, pos.z)
 				Cyber.closeDeck()
 				local net = Network.get(Cyber.addr)
 				say("You're in " .. net.name .. ". " .. #Network.floors(net) .. " floors below you.", "ok")
