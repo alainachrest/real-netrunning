@@ -11,7 +11,7 @@ Version 0.1.0 — first playable build.
 - redscript and Codeware 1.21 or newer, for the in-game deck
 - Optional: [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) 1.4.8 or newer, for its stores in the desktop Browser
 - Optional: [Browser Extension](https://www.nexusmods.com/cyberpunk2077/mods/10038), for other mods' sites in the desktop Browser
-- CyberScript with the shared core (API 2): the [`api-hooks-and-2.5` build](https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5). Real Netrunning runs on its shared core (organisations, stock market, news, heat and standing), which the other mods share too. Without it, the deck says so and stays offline.
+- CyberScript with the shared core (API 2): the [`api-hooks-and-2.5` build](https://github.com/alainachrest/cyberscript-cp2077-fork/tree/api-hooks-and-2.5). Real Netrunning runs on its shared core (organisations, stock market, news, heat and standing), which other mods share too. Without it, the deck says so and stays offline.
 
 ## Install
 
