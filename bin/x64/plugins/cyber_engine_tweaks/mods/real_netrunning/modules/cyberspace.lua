@@ -69,9 +69,34 @@ local function roll() return Cyber.random and Cyber.random() or math.random() en
 -- blades are taken from their hands and pockets every half second; their fists
 -- are left alone, so they keep fighting. (Spawning them from edited copies of
 -- their records instead leaves them standing about, not fighting.)
-local function keepDisarmed(id, dt)
-	World.disarm(id, Kit.allowedWeapons)
+Cyber.armedRecords = {}   -- fighters found carrying guns: never used again this session
+
+-- The record to spawn for a fighter: the one asked for, unless it's known to
+-- carry a gun, in which case the first fallback brawler that isn't.
+local function fighterRecord(record)
+	if not Cyber.armedRecords[record] then return record end
+	for _, r in ipairs(Kit.fallbackBrawlers) do
+		if not Cyber.armedRecords[r] then return r end
+	end
+	return record
 end
+Cyber.fighterRecord = fighterRecord
+
+-- Checks a newly spawned fighter once. Returns true when it carries a gun and
+-- should be swapped (its record is remembered as armed). Fighters are never
+-- disarmed: an NPC whose gun is taken just stands there trying to draw it.
+local function carriesGun(id, record, checked)
+	if checked[id] then return false end
+	local gun = World.npcHasGun(id)
+	if gun == nil then return false end -- not ready yet
+	checked[id] = true
+	if gun then
+		Cyber.armedRecords[record] = true
+		return fighterRecord(record) ~= record
+	end
+	return false
+end
+Cyber.gunChecked = {}
 
 -- The jack-in/out effect: spawned around V for a few seconds.
 local function playTransition(x, y, z)
@@ -861,8 +886,8 @@ local function spawnIce(i)
 	if spot then x, y, z = spot.x, spot.y, spot.z else x, y, z = descentPoint(i) end
 	for k = 1, count do
 		local offset = (k - (count + 1) / 2) * 2.5
-		local id = World.spawnNPC(record, x + offset, y + offset * 0.3, z + 0.2, 180)
-		if id ~= nil then table.insert(floor.ice, id) end
+		local id = World.spawnNPC(fighterRecord(record), x + offset, y + offset * 0.3, z + 0.2, 180)
+		if id ~= nil then table.insert(floor.ice, id) floor.iceRecords = floor.iceRecords or {} floor.iceRecords[id] = fighterRecord(record) end
 	end
 	say((lock.kind == "black" and "BLACK ICE" or "ICE") .. " materialises in front of the sealed doorway. " ..
 		count .. (count == 1 and " program." or " programs."), lock.kind == "black" and "err" or "warn")
@@ -880,10 +905,18 @@ local function updateIce(dt)
 		if dead == false then
 			alive = alive + 1
 			if not floor.iceHostile[k] then floor.iceHostile[k] = World.makeHostile(id) end
-			-- ICE fights like V: quickhacks and bare hands, no guns or blades. Checked every tick for
-			-- as long as it lives: NPCs draw a fresh weapon from their loadout
-			-- once a fight starts.
-			keepDisarmed(id, dt)
+			-- ICE fights like V: bare hands. One that turns out to carry a gun is
+			-- swapped for a fist fighter where it stands.
+			local rec = floor.iceRecords and floor.iceRecords[id]
+			if rec and carriesGun(id, rec, Cyber.gunChecked) then
+				local p = World.npcPosition(id)
+				World.deleteNPC(id)
+				local newRec = fighterRecord(rec)
+				local newId = p and World.spawnNPC(newRec, p.x, p.y, p.z, 180)
+				if newId then
+					floor.ice[k], floor.iceRecords[newId], floor.iceHostile[k] = newId, newRec, false
+				end
+			end
 		elseif dead == nil then
 			alive = alive + 1 -- still spawning
 		end
@@ -1006,7 +1039,8 @@ local function spawnHunter(h, room, from)
 	end
 	h.room = room
 	if h.id == nil then
-		h.id = World.spawnNPC(h.record, x, y, floor.z + 0.2, yaw)
+		h.actualRecord = fighterRecord(h.record)
+		h.id = World.spawnNPC(h.actualRecord, x, y, floor.z + 0.2, yaw)
 		h.hostile, h.disarmed = false, 0
 		return h.id ~= nil
 	end
@@ -1113,7 +1147,14 @@ local function updateHunter(h, dt, here)
 		return
 	end
 	if not h.hostile then h.hostile = World.makeHostile(h.id) end
-	keepDisarmed(h.id, dt)
+	-- a fighter carrying a gun is swapped for a fist fighter where it stands
+	if carriesGun(h.id, h.actualRecord or h.record, Cyber.gunChecked) then
+		World.deleteNPC(h.id)
+		h.id = nil
+		h.record = fighterRecord(h.actualRecord or h.record)
+		spawnHunter(h, h.room)
+		return
+	end
 	if h.floor ~= Cyber.floor then return end
 	local floor = Cyber.floors[h.floor]
 	local L = floor and floor.layout

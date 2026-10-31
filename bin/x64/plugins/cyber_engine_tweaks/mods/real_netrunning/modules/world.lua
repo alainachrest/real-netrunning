@@ -354,6 +354,26 @@ end
 -- fists), so it fights with quickhacks and bare hands like V.
 -- handsOnly: only take what it's holding right now, leaving its inventory alone.
 -- Returns how many weapons were removed (0 once it's unarmed), or nil if it isn't there yet.
+-- true if a spawned NPC carries any gun (in its hands or its pockets), false
+-- if it has none, nil if it isn't there yet.
+function World.npcHasGun(id)
+	return try(function()
+		local npc = Game.FindEntityByID(id)
+		if npc == nil then return nil end
+		local ts = Game.GetTransactionSystem()
+		local ok, items = ts:GetItemList(npc)
+		if not ok or items == nil then return nil end
+		for _, data in ipairs(items) do
+			local okTag, yes = pcall(function()
+				local record = TweakDBInterface.GetItemRecord(data:GetID():GetTDBID())
+				return record ~= nil and record:TagsContains("RangedWeapon")
+			end)
+			if okTag and yes then return true end
+		end
+		return false
+	end)
+end
+
 function World.disarm(id, keep, handsOnly)
 	-- Only guns go: anything tagged as a ranged weapon. Everything else (fists,
 	-- Gorilla Arms) stays, so the NPC still has something to fight with. Going

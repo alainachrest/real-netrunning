@@ -89,6 +89,17 @@ Kit.rivals = {
 	"Character.animals_elite2_hmelee2_fists_mba_rare",
 	"Character.jpn_tyger_claws_martial_hmelee3_StrongArms_mb",
 }
+-- If a fighter turns out to carry a gun, taking it away leaves it stuck trying
+-- to draw it, so instead it's swapped for one of these plain fist fighters
+-- (the first that carries no gun), and its kind is never used again that session.
+Kit.fallbackBrawlers = {
+	"Character.jpn_tyger_claws_gangster1_melee1_fists_ma",
+	"Character.nid_scavenger_grunt1_melee1_fists_ma",
+	"Character.animals_grunt1_melee1_fists_mb",
+	"Character.dtn_animals_bouncer1_melee1_fists_mb",
+	"Character.bou_scrappers_grunt1_melee1_fists_wa",
+}
+
 -- a rogue AI wearing the body it found: a boxing robot
 Kit.rogueAI = {
 	"Character.boxingrobot_hard",
