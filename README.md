@@ -157,7 +157,7 @@ Some networks are air-gapped: you can't reach them over the Net at all. Each one
 
 Networks change hands. The gangs and corporations fight over the Net all the time, and the networks you take are yours only as long as you can hold them.
 
-- Every few minutes of play a gang or corp goes after someone else's network. Gangs fight gangs (and take independent networks) on Night City's streets; corps fight corps anywhere. Rivals go for each other first: Valentinos and 6th Street, Maelstrom and Tyger Claws, Arasaka, Militech and Kang Tao, and so on. Each takeover plays out over a few minutes and ends up in the news.
+- Every few minutes of play a gang or corp goes after someone else's network. Gangs fight gangs (and take independent and device networks) on Night City's streets; corps fight corps anywhere. Rivals go for each other first: Valentinos and 6th Street, Maelstrom and Tyger Claws, Arasaka, Militech and Kang Tao, and so on. Each takeover plays out over a few minutes and ends up in the news.
 - When a network changes hands, its new owner rebuilds the ICE: any progress you'd made on it is gone, and you breach it from the lobby again. Nobody starts a takeover of the network you're working on at that moment.
 - `scan` shows who holds a network when it isn't its original operator, and which ones are under attack. `territory` shows who holds how many and every fight going on.
 - Taking a network from a gang or corp costs standing with them (more for bigger networks) and earns a little with their rivals. Standing is the shared core's, so other mods see it too.
@@ -167,7 +167,7 @@ Networks change hands. The gangs and corporations fight over the Net all the tim
   - `guard basic` or `guard elite`: a hired netrunner sits on the network for 2 hours of play, adds to its defences and pushes raiders back while you're away. Guards can be flatlined in a hard fight.
   - Fight them live: `defend` from the deck counter-hacks the attackers, or jack in and the raiders are there in cyberspace. Every one you derezz weakens the attack (and pays a little); they keep coming in waves until the attack breaks or ends.
 - You can join other people's fights too: jack into a network under attack and the attackers' netrunners are there, fighting the network's own ICE. Derezz them, or `defend` from the deck, and the defenders will remember who helped.
-- Only the Net's own networks are fought over. Device networks, computers, the public subnet and closed networks stay out of it.
+- Every network is fought over: corporate and gang networks, local ones, device networks, computers, even closed and isolated networks (their new owners walk in on site). Only the public subnet and your home network are safe.
 
 ## NetWatch
 

@@ -801,7 +801,7 @@ def("holdings", "holdings", "The networks you hold, their defences, and any raid
 		local net = Network.get(addr)
 		if net and not Territory.contestable(net) then others = others + 1 end
 	end
-	if others > 0 then out("  Plus " .. others .. " device networks, computers and closed networks nobody fights over.") end
+	if others > 0 then out("  Plus your home network, which nobody can take.") end
 	if #mine > 0 then out("Raise ICE with 'harden <level>', hire a guard with 'guard basic|elite', while connected to the network.") end
 end)
 

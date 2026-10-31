@@ -79,13 +79,14 @@ end
 
 local FACTION_KINDS = { gang = true, corp = true }
 
--- Networks anyone fights over: the lore and local networks of the Net. Not the
--- public subnet, sites, device networks, computers, or air-gapped networks.
+-- Every network is fought over except the public subnet and V's home network.
 function Territory.contestable(net)
-	if net == nil or net.kind ~= "lore" or net.closed or net.isolated or net.hub then return false end
-	local org = Lore.getOrg(net.org)
-	return org.kind ~= "device" and org.kind ~= "city"
+	if net == nil or net.hub or net.addr == "nc.subnet.public" then return false end
+	return net.addr:find("^home%.") == nil
 end
+
+-- Gangs work Night City's streets (closed networks are in the city too).
+local function inGangReach(net) return net.region == "nc" or net.region == "closed" end
 
 function Territory.holder(addr)
 	if Network.isOwned(addr) then return "player" end
@@ -304,12 +305,12 @@ function Territory.worldTick()
 		local net = Network.get(addr)
 		local holder = Territory.holder(addr)
 		if Territory.contestable(net) and holder ~= attacker and holder ~= "player" and t.attacks[addr] == nil
-			and not Territory.busy(addr) and (org.kind ~= "gang" or net.region == "nc") then
+			and not Territory.busy(addr) and (org.kind ~= "gang" or inGangReach(net)) then
 			-- gangs mostly fight gangs over the streets; corps mostly fight corps
 			local hk = Lore.getOrg(holder).kind
 			local w
 			if isRival(attacker, holder) then w = 4
-			elseif org.kind == "gang" then w = (hk == "gang" and 1) or (hk == "civilian" and 2) or 0.3
+			elseif org.kind == "gang" then w = (hk == "gang" and 1) or ((hk == "civilian" or hk == "device") and 2) or 0.3
 			else w = ((hk == "corp" or hk == "media") and 1) or (hk == "gang" and 0.4) or 0.3 end
 			if net.tier >= 3 then w = w * 0.2 end
 			table.insert(options, { addr = addr, w = w })
@@ -349,7 +350,7 @@ function Territory.startRaid(addr)
 		local list = {}
 		for _, id in ipairs(Territory.factions()) do
 			local o = Lore.getOrg(id)
-			if o.kind ~= "gang" or net.region == "nc" then
+			if o.kind ~= "gang" or inGangReach(net) then
 				table.insert(list, { id = id, w = 1 + math.max(0, -standingOf(id)) / 10 })
 			end
 		end
