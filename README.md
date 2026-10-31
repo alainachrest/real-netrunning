@@ -65,7 +65,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
-- Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
+- Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Small networks (single devices, computers) leave their core unguarded, but you still have to reach it: walk down and use it in cyberspace, or `breach` it (instant) or `cd` into it from the deck. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
 - Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually headquarters around the world and in orbit.
 - Progress through each network's floors is saved, so you can come back and carry on.
 - Deck power comes from the tier of the cyberdeck V has installed, as in Much Better Netrunning: Common 1, Uncommon 2, Rare 3, Epic 4, Legendary 5, Legendary+ and ++ 6. Without a cyberdeck you can't `breach` or `crack` at all.

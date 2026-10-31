@@ -419,8 +419,22 @@ function Network.floorFolder(index, f)
 	return string.format("%02d_%s", index, f.kind)
 end
 
+-- An unguarded core (no ICE) still has to be reached to take root: it stays
+-- shut until V walks in (cyberspace) or breaches it (deck), which is instant.
 local function isLocked(f)
-	return LOCKED[f.kind] == true and not (f.kind == "core" and f.ice == 0)
+	return LOCKED[f.kind] == true
+end
+
+function Network.isUnguardedCore(f)
+	return f ~= nil and f.kind == "core" and (f.ice or 0) == 0
+end
+
+-- Takes root by reaching an unguarded core that's next in line. Returns the
+-- revealed routes (a table) when it worked, nil when there's no such core.
+function Network.claimCore(addr)
+	local index, f = Network.nextLock(addr)
+	if index == nil or not Network.isUnguardedCore(f) then return nil end
+	return Network.unlockNext(addr)
 end
 
 -- How many floors are open. Open floors right after an unlocked one open too.

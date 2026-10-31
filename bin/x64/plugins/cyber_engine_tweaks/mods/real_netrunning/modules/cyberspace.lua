@@ -473,6 +473,8 @@ local function lockAfter(i)
 	local net = Network.get(Cyber.addr)
 	local floors = Network.floors(net)
 	if i >= #floors or Network.isFloorOpen(Cyber.addr, i + 1) then return nil end
+	-- an unguarded core isn't sealed off: walk down and take it
+	if Network.isUnguardedCore(floors[i + 1]) and Network.nextLock(Cyber.addr) == i + 1 then return nil end
 	return floors[i + 1]
 end
 
@@ -867,8 +869,16 @@ function Cyber.use()
 		Cyber.run("devices")
 		Cyber.openDeck()
 	elseif o.kind == "core" then
-		Cyber.run("status")
-		World.notify(Network.isOwned(net.addr) and "Root access. This network is yours." or "The core is still locked.")
+		local revealed = Network.claimCore(net.addr)
+		if revealed then
+			say("Nothing guards the core. Root access on " .. net.name .. ".", "ok")
+			for _, r in ipairs(revealed) do say("New route found: " .. r, "ok") end
+			emit("hack.breach", { addr = net.addr, org = net.org, success = true, ice = 0, tier = net.tier, floor = o.floor, cyberspace = true })
+			World.notify("Root access")
+		else
+			Cyber.run("status")
+			World.notify(Network.isOwned(net.addr) and "Root access. This network is yours." or "The core is still locked.")
+		end
 	end
 	emit("cyber.use", { addr = net.addr, kind = o.kind, path = o.path })
 	return true

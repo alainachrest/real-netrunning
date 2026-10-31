@@ -254,8 +254,9 @@ def("connect", "connect <address>", "Connect to a network from scan.", function(
 	Shell.cwd = "/" .. Network.floorFolder(1, floors[1])
 	out("Connected to " .. net.name .. ". " .. #floors .. " floors." ..
 		(Network.lag(net) ~= 1 and (" Routing via " .. Lore.region(net.region).name .. ", lag x" .. Network.lag(net) .. ".") or ""), "ok")
-	-- networks with no locks at all open up straight away
-	if Network.nextLock(addr) == nil and not Network.isOwned(addr) then
+	-- networks with no ICE at all open up straight away
+	local _, firstLock = Network.nextLock(addr)
+	if (firstLock == nil or (net.ice == 0 and Network.isUnguardedCore(firstLock))) and not Network.isOwned(addr) then
 		Network.markOwned(addr)
 	end
 	if Network.isOwned(addr) then
@@ -302,6 +303,13 @@ def("breach", "breach", "Break the ICE on the next locked floor.", function()
 	if Shell.job then out("A breach is already running.", "err") return end
 	local index, f = Network.nextLock(net.addr)
 	if index == nil then out("You already have root here.") return end
+	if Network.isUnguardedCore(f) then
+		local revealed = Network.claimCore(net.addr)
+		out("Nothing guards the core. You walk straight in. Root access on " .. net.name .. ".", "ok")
+		for _, r in ipairs(revealed or {}) do out("New route found: " .. r, "ok") end
+		emit("hack.breach", { addr = net.addr, org = net.org, success = true, ice = 0, tier = net.tier, floor = index })
+		return
+	end
 	if f.kind == "password" then
 		out("Floor " .. index .. " is a password gate. Use 'password <code>' or 'crack'.", "warn")
 		return
@@ -358,6 +366,15 @@ end
 
 local function checkFloor(net, path)
 	if Network.canAccess(net, path) then return true end
+	-- walking into an unguarded core takes it
+	local index, f = Network.nextLock(net.addr)
+	if index and Network.isUnguardedCore(f) and Network.floorOfPath(net, path) == index then
+		local revealed = Network.claimCore(net.addr)
+		out("Nothing guards the core. You walk straight in. Root access on " .. net.name .. ".", "ok")
+		for _, r in ipairs(revealed or {}) do out("New route found: " .. r, "ok") end
+		emit("hack.breach", { addr = net.addr, org = net.org, success = true, ice = 0, tier = net.tier, floor = index })
+		return Network.canAccess(net, path)
+	end
 	out("Locked. Floor " .. Network.floorOfPath(net, path) .. " isn't open yet. Type 'map'.", "err")
 	return false
 end
