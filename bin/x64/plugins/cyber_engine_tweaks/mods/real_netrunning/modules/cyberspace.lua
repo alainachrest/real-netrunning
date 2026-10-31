@@ -72,6 +72,26 @@ local function keepDisarmed(id, dt)
 	World.disarm(id, Kit.allowedWeapons)
 end
 
+-- The jack-in/out effect: spawned around V for a few seconds.
+local function playTransition(x, y, z)
+	if Kit.templates.transition == nil then return end
+	local id = World.spawnProp(Kit.templates.transition, x, y, z, 0)
+	if id then
+		Cyber.transitions = Cyber.transitions or {}
+		table.insert(Cyber.transitions, { id = id, timer = 5.0 })
+	end
+end
+
+function Cyber.updateTransitions(dt)
+	if Cyber.transitions == nil then return end
+	local kept = {}
+	for _, t in ipairs(Cyber.transitions) do
+		t.timer = t.timer - dt
+		if t.timer <= 0 then World.despawnProp(t.id) else table.insert(kept, t) end
+	end
+	Cyber.transitions = kept
+end
+
 local function emit(event, data) if Cyber.bus then Cyber.bus.emit(event, data) end end
 local function say(text, kind) Cyber.print(text, kind or "out") end
 

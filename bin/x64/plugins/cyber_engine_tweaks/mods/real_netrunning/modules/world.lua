@@ -248,6 +248,25 @@ end
 -- just stand there). Its quickhacks and everything else are the original's.
 -- Returns the copy's record name, or nil if TweakDB wouldn't do it.
 World.fistsFrom = "Character.tyger_claws_gangster2_melee2_fists_ma"
+
+-- A copy of a brawler's record with its secondary equipment (the gun some of
+-- them pull when a fist fight goes badly) removed; its fists stay.
+local fistsOnly = {}
+function World.fistsOnlyRecord(record)
+	if fistsOnly[record] ~= nil then return fistsOnly[record] or nil end
+	local name = try(function()
+		local empty = "RealNetrunning.NoEquipment"
+		if TweakDB:GetRecord(empty) == nil then
+			TweakDB:CreateRecord(empty, "gamedataNPCEquipmentGroup_Record")
+		end
+		local copy = "RealNetrunning.FistsOnly_" .. record:gsub("^Character%.", "")
+		if TweakDB:GetRecord(copy) == nil and not TweakDB:CloneRecord(copy, record) then return nil end
+		TweakDB:SetFlat(copy .. ".secondaryEquipment", TweakDBID.new(empty))
+		return copy
+	end)
+	fistsOnly[record] = name or false
+	return name
+end
 local unarmed = {}
 function World.unarmedRecord(record)
 	if unarmed[record] ~= nil then return unarmed[record] or nil end
