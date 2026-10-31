@@ -1,6 +1,6 @@
 # Real Netrunning
 
-Grey Hack-style netrunning for Cyberpunk 2077, built from Night City's own lore. Scan for networks, break their ICE, read what's inside, sell paydata and jack into real doors and cameras around you. NetWatch is watching.
+Grey Hack-style netrunning for Cyberpunk 2077, built from Night City's own lore. Scan for networks, break their ICE, read what's inside, sell paydata and jack into any devices around you. NetWatch is watching.
 
 Version 0.1.0 — first playable build.
 
