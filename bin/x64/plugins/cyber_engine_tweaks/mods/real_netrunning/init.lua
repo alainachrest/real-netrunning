@@ -108,6 +108,7 @@ registerForEvent("onInit", function()
 	math.randomseed(os.time())
 	pcall(GameHUD.Initialize)
 	World.hud = GameHUD
+	do local CyberKit = require("modules/cyberkit") World.watchParticleBlocks(CyberKit.particleKind, CyberKit.roomParticles) end
 
 	GameSession.StoreInDir("sessions")
 	GameSession.Persist(Persisted, true)

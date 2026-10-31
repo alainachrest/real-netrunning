@@ -370,7 +370,8 @@ local function buildFloor(net, i, f, count)
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight - 0.8, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.1, kind = 4 })
 			-- cyberspace particles drifting through the room
 			if Kit.particleRooms > 0 and (x + y) % Kit.particleRooms == 0 then
-				prop(floor.props, Kit.templates.roomParticles, rx, ry, cz + Kit.wallHeight / 2, 0)
+				local id = World.spawnBlock(rx, ry, cz + Kit.wallHeight / 2, 0, r / 2, r / 2, Kit.wallHeight / 2, Kit.particleKind)
+				if id ~= nil then table.insert(floor.props, id) Cyber.particlesAsked = (Cyber.particlesAsked or 0) + 1 end
 			end
 			-- a ceiling on top of the walls, so nothing outside cyberspace shows
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight + 0.25, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.25, kind = 2 })
@@ -1596,6 +1597,8 @@ function Cyber.debug()
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
 		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
 		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/8")
+	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", added " .. tostring(World.particlesAdded) ..
+		(World.particleError and (", error: " .. World.particleError) or ""))
 	table.insert(lines, "V's effects: " .. tostring(World.playerEffects()))
 	local looks = World.cyberCall("MarkerAppearances")
 	if type(looks) == "string" and looks ~= "" then

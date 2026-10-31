@@ -326,6 +326,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // kind 2: ceiling (the floor mesh upside down, its face on the underside of the box)
     // kind 3: solid dark block (the outer shell of a floor, corner pillars)
     // kind 4: a light (no collider, nothing to see): the room's own glow
+    // kind 5: particles (no collider; Lua adds the particle system)
     // kind 10 and up: a marker (no collider): hx is its size (see RNMarker*)
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
@@ -378,6 +379,10 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         }
         if kind >= 10 {
             this.AddMarker(template, kind, size.X);
+            return;
+        }
+        if kind == 5 {
+            // particles: added by the Lua side (it observes this callback)
             return;
         }
 
@@ -482,6 +487,11 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             back.isEnabled = true;
             template.AddComponent(back);
         }
+    }
+
+    // The kind of block an entity is (see SpawnBlock), for the Lua side.
+    public func BlockKind(id: EntityID) -> Int32 {
+        return RoundF(this.SizeOf(id).W);
     }
 
     public func CollidersAdded() -> Int32 {

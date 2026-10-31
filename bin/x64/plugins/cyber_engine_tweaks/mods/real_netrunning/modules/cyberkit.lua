@@ -48,8 +48,6 @@ Kit.templates = {
 	-- Transmission's "leaving cyberspace" entity showed nothing on its own)
 	transition     = nil,
 
-	-- cyberspace particles drifting through every room
-	roomParticles  = "base\\fx\\meshes\\cyberparticles\\cyberparticles.ent",
 
 	-- things on floors
 	data           = "base\\fx\\meshes\\cyberparticles\\q110_platforms.ent",
@@ -112,6 +110,9 @@ Kit.markers = { file = 10, paydata = 11, taken = 12, down = 13, up = 14, exit = 
 Kit.markerSize = { [10] = 1.8, [11] = 1.8, [12] = 1.4, [13] = 6.0, [14] = 6.0, [15] = 3.0, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
 -- cyberspace particles in every room (1), every other room (2), or none (0)
 Kit.particleRooms = 1
+-- the particle system drifting through each room (a .particle; the first that loads is used)
+Kit.roomParticles = "base\\fx\\quest\\q116\\q116_04_mikoshi_intro\\q116_alt_background.particle"
+Kit.particleKind = 5
 
 function Kit.iceRecord(orgId, org, black)
 	if black then return Kit.ice.black end

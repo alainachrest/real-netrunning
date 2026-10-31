@@ -463,6 +463,30 @@ function World.playerEffects()
 	return result
 end
 
+-- Particles in cyberspace rooms: the redscript side builds each particle
+-- block (kind 5) and this adds the particle system while it's being built,
+-- through Codeware's ResourceHelper (the way World Builder adds particles).
+World.particlesAdded, World.particleError = 0, nil
+function World.watchParticleBlocks(kind, path)
+	return try(function()
+		Observe("RealNetrunning.RNCyberspaceSystem", "OnBlockExtract", function(system, event)
+			local ok, err = pcall(function()
+				local builder = event:GetEntityBuilder()
+				if builder == nil then return end
+				if system:BlockKind(builder:GetEntityID()) ~= kind then return end
+				local component = entParticlesComponent.new()
+				component.name = "rn_particles"
+				ResourceHelper.LoadReferenceResource(component, "particleSystem", path, true)
+				component.emissionRate = 1.0
+				builder:GetTemplate():AddComponent(component)
+				World.particlesAdded = World.particlesAdded + 1
+			end)
+			if not ok then World.particleError = tostring(err) end
+		end)
+		return true
+	end)
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end
