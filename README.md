@@ -60,7 +60,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `scrub` | Wipe your traces from a network you have root on, lowering heat (once per network) |
 | `netwatch` | Threat level, heat and agents derezzed. `netwatch world off` stops attacks on V outside the Net |
 | `status` | Deck power, trace, NetWatch heat and threat level |
-| `jackin`, `jackout`, `cyber` | Enter the network you're connected to in cyberspace, leave it, or see where you are |
+| `jackin`, `jackout`, `cyber` | Enter the network you're connected to in cyberspace, leave it, or see where you are. `cyber scan` maps the rooms around you |
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
 
@@ -75,14 +75,19 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 
 Connect to a network and type `jackin`: V's body stays where it is, and V walks into the network itself, built high above Night City out of the game's own cyberspace (Mikoshi, Alt's cyberspace and the Blackwall).
 
-Bind **Cyberspace: use** and **Cyberspace: jack out** in CET's Hotkeys tab.
+Bind **Cyberspace: use**, **Cyberspace: scan nearby rooms** and **Cyberspace: jack out** in CET's Hotkeys tab.
 
 - Every floor of the network is a complex of 16 m rooms (4 x 4 up to 8 x 8 for off-world headquarters), with walls, doorways and ceilings, stacked downwards. The rooms branch off in every direction, with loops and dead ends, so there's more than one way through. You arrive along one edge; the way down is in the room furthest away, and data objects are tucked into dead ends first, then the other rooms. Only the floor you're on and the one below are built at any time; going back up rebuilds the floor above first. Layouts are generated from your save, so each network's floors are the same every visit.
 - While the floor below is locked, the doorway into the room with the way down is sealed by a barrier you can't walk through.
 - **ICE** stands guard at the sealed doorway as the owner's own netrunners: gang netrunners on gang nets, corporate security on corp nets, Voodoo Boys-grade elites for Black ICE. Take them down and the next floor opens. Fighting ICE raises your trace. You can still `breach` from the deck instead: use the gate, or type it.
 - **Data objects** on each floor are its files. Use one to download paydata, or to read it in the deck.
 - **Password gates** open your deck to type the code or `crack` it. Control floors have a device console; the core is the bottom floor.
-- **NetWatch** agents who trace into the network show up in person. Kill one for the same bounty as `fight`.
+- **NetWatch** agents who trace into the network show up in person, on the far side of the floor, and work their way through the rooms to you (they don't hit your trace from afar while you're jacked in). Kill one for the same bounty as `fight`.
+- **Patrolling ICE** wanders the corridors of networks you don't own, a room at a time. Get within a couple of rooms and it picks up your trail and hunts you. Fighting it raises your trace.
+- **Rival netrunners and rogue AIs** turn up now and then in any network, even ones you already own, so going back is never quite safe. They hunt you room by room and follow you between floors. Rivals' deck shards fence for eddies; rogue AIs are rarer and tougher, worth far more, and make the news. (Your own computer at home stays safe.)
+- **Deep floors** (floor 3 and down) of networks you don't own raise your trace just for being there, faster the deeper and bigger the network, so you can't wander forever.
+- **Scan** (`cyber scan` or its hotkey) lists the doorways out of your room and what's within three rooms of you, with the route to each: data, the way down, the way back up, and anything hostile. It costs 6% trace, free on networks you own.
+- Hunters move the way data does: they blink from room to room through the doorways, and fight normally once they're in your room.
 - No guns in cyberspace: quickhacks only. Fast travel and manual saves are blocked until you jack out.
 - Jack out with the hotkey, `jackout`, or the exit node on the first floor. You're thrown out, with dumpshock, if you're traced, if your health drops too low (not on Black ICE floors: Black ICE kills), or if something finds your body. Jacking in from one of V's own home computers keeps your body safe.
 - Terminal and cyberspace are the same network: anything opened in one is open in the other.

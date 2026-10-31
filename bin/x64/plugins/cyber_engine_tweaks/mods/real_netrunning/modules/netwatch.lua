@@ -120,6 +120,8 @@ local function updateAgent(dt, connected)
 		end
 		return
 	end
+	-- in cyberspace the agent comes for V in person instead (modules/cyberspace)
+	if NetWatch.inPerson and NetWatch.inPerson(agent.addr) then return end
 	agent.attackTimer = agent.attackTimer + dt
 	if agent.attackTimer >= 4 then
 		agent.attackTimer = 0

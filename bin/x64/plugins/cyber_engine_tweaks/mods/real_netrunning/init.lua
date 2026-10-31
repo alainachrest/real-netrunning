@@ -53,6 +53,7 @@ Cyber.print = Shell.print
 Cyber.run = function(command) Shell.run(command) end
 Cyber.addTrace = function(amount) Shell.addTrace(amount) end
 Cyber.connected = function() return Shell.connected end
+NetWatch.inPerson = function(addr) return Cyber.active and Cyber.phase == "in" and Cyber.addr == addr end
 Cyber.setCwd = function(path) Shell.setCwd(path) end
 Cyber.openDeck = function() if not Native.isOpen() then Native.open() end end
 Cyber.closeDeck = function() if Native.isOpen() then Native.close() end end
@@ -164,6 +165,10 @@ end)
 
 registerHotkey("rn_cyber_use", "Cyberspace: use", function()
 	if RealNetrunning.ready then Cyber.use() end
+end)
+
+registerHotkey("rn_cyber_scan", "Cyberspace: scan nearby rooms", function()
+	if RealNetrunning.ready and Cyber.active then Shell.run("cyber scan") Cyber.openDeck() end
 end)
 
 registerHotkey("rn_cyber_out", "Cyberspace: jack out", function()

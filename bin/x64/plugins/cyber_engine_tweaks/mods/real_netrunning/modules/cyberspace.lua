@@ -10,7 +10,12 @@
 --   * ICE stands guard as the owner's own netrunners; take them down and the
 --     floor behind them opens (or 'breach' it from the deck as usual)
 --   * data objects are the floor's files: use one to download or read it
---   * NetWatch agents who trace into the network turn up in person
+--   * NetWatch agents who trace into the network turn up in person, on the far
+--     side of the floor, and hunt V through the rooms
+--   * patrolling ICE wanders the corridors; rival netrunners and rogue AIs
+--     turn up now and then, even in networks V owns
+--   * deep floors of networks V doesn't own raise trace just for being there
+--   * 'cyber scan' maps the rooms around V, at a cost in trace
 --
 -- No guns in cyberspace: quickhacks only. Saving is blocked while jacked in.
 -- Jack out any time; a dangerous jack-out (trace, low health, something
@@ -423,6 +428,14 @@ local function unbuildFloor(i)
 	for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 	for _, id in ipairs(floor.corpses) do World.deleteNPC(id) end
 	if floor.gate then World.despawnProp(floor.gate.barrier) end
+	-- patrols go with their floor; anything hunting V waits to follow
+	for _, h in ipairs(Cyber.hunters or {}) do
+		if h.floor == i and not h.gone then
+			if h.id then World.deleteNPC(h.id) end
+			h.id = nil
+			if h.kind == "patrol" or h.mode ~= "hunt" then h.gone = true end
+		end
+	end
 	local kept = {}
 	for _, o in ipairs(Cyber.objects) do
 		if o.floor ~= i then table.insert(kept, o) end
@@ -470,7 +483,7 @@ end
 local function clear()
 	for i in pairs(Cyber.floors) do unbuildFloor(i) end
 	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
-	if Cyber.agentNPC then World.deleteNPC(Cyber.agentNPC) end
+	Cyber.clearHunters()
 	World.cyberCall("ForgetBlocks")
 	Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC = {}, {}, {}, nil
 end
@@ -498,6 +511,7 @@ local function moveToFloor(i, fromBelow, waited)
 	World.teleport(Cyber.target.x, Cyber.target.y, Cyber.target.z, Cyber.target.yaw)
 	Cyber.floor = i
 	Cyber.prompt = nil
+	Cyber.huntersFollow(i, fromBelow)
 	local net = Network.get(Cyber.addr)
 	Cyber.setCwd("/" .. Network.floorFolder(i, Network.floors(net)[i]))
 	emit("cyber.floor", { addr = Cyber.addr, floor = i })
@@ -520,6 +534,7 @@ function Cyber.jackIn()
 	Cyber.addr, Cyber.body, Cyber.floor = addr, body, 1
 	Cyber.bodySafe = addr:sub(1, 5) == "home."
 	Cyber.danger, Cyber.dangerTimer, Cyber.falls, Cyber.prompt = nil, 0, {}, nil
+	Cyber.hunters, Cyber.encounterTimer, Cyber.deepWarned, Cyber.agentFought = {}, 0, 0, false
 	local s = state()
 	s.active, s.body, s.addr = true, { x = body.x, y = body.y, z = body.z, yaw = body.yaw }, addr
 
@@ -577,7 +592,7 @@ end
 
 -- A save loaded while V was in cyberspace: put V back in their body.
 function Cyber.onSessionStart()
-	Cyber.active, Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC = false, {}, {}, {}, nil
+	Cyber.active, Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC, Cyber.hunters = false, {}, {}, {}, nil, {}
 	local s = Network.state and Network.state.cyber
 	if s and s.active and s.body then Cyber.pendingRecover = 2.0 end
 end
@@ -762,33 +777,467 @@ local function updateIce(dt)
 	refreshGates()
 end
 
-local function updateAgent()
-	local agent = NetWatch.agent
-	if agent and agent.addr == Cyber.addr and agent.eta <= 0 then
-		if Cyber.agentNPC == nil then
-			local pos = World.playerTransform()
-			if pos then
-				Cyber.agentNPC = World.spawnNPC(Kit.netwatch, pos.x + 4, pos.y + 4, pos.z + 0.2, 225)
-				Cyber.agentHostile, Cyber.agentDisarmed = false, 0
-				say(agent.name .. " steps out of the data stream. Take it down.", "err")
-			end
-		else
-			local dead = World.npcDead(Cyber.agentNPC)
-			if dead == false and not Cyber.agentHostile then Cyber.agentHostile = World.makeHostile(Cyber.agentNPC) end
-			if dead == false and (Cyber.agentDisarmed or 0) < 6 then
-				World.disarm(Cyber.agentNPC)
-				Cyber.agentDisarmed = (Cyber.agentDisarmed or 0) + 1
-			end
-			if dead == true then
-				Cyber.agentNPC = nil
-				local _, message = NetWatch.win()
-				say(message, "ok")
+---------------------------------------------------------------------------
+-- Things that hunt V through the rooms
+---------------------------------------------------------------------------
+--
+-- Cyberspace has no navigation mesh, so hunters move the way data does: they
+-- blink from room to room through the doorways, following the maze. Once one
+-- shares a room with V it fights normally.
+--
+--   patrol  the network's own ICE, wandering the corridors of networks you
+--           don't own; it starts hunting when it gets close
+--   rival   another netrunner working the same network; anywhere, even
+--           networks you own; drops eddies
+--   rogue   a rogue AI loose in the network; rarer, tougher, worth more, makes
+--           the news
+--   agent   a NetWatch agent who traced in: it arrives on the far side of the
+--           floor and works its way to you
+--
+-- Rivals, rogue AIs and agents follow V between floors; patrols stay on theirs.
+
+Cyber.hunters = {}
+
+local function cellId(c) return c[1] .. "," .. c[2] end
+
+-- The room a point on floor i is in: { x, y }.
+local function roomAt(i, px, py)
+	local floor = Cyber.floors[i]
+	if floor == nil or floor.layout == nil then return nil end
+	local L = floor.layout
+	local cx, cy = centre(i)
+	local r = Kit.roomSize
+	local x = math.floor((px - cx) / r + L.w / 2)
+	local y = math.floor((py - cy) / r + L.h / 2)
+	return { math.max(0, math.min(L.w - 1, x)), math.max(0, math.min(L.h - 1, y)) }
+end
+Cyber.roomAt = roomAt
+
+local function doorsFrom(L, c)
+	local list = {}
+	for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+		local nx, ny = c[1] + d[1], c[2] + d[2]
+		if nx >= 0 and nx < L.w and ny >= 0 and ny < L.h and L.doors[L.key(c[1], c[2], nx, ny)] then
+			table.insert(list, { nx, ny })
+		end
+	end
+	return list
+end
+
+-- Steps (through doorways) from room a to every room: id -> steps, id -> first step.
+local function distances(L, a)
+	local dist, first = { [cellId(a)] = 0 }, {}
+	local queue = { a }
+	while #queue > 0 do
+		local c = table.remove(queue, 1)
+		for _, n in ipairs(doorsFrom(L, c)) do
+			local nid = cellId(n)
+			if dist[nid] == nil then
+				dist[nid] = dist[cellId(c)] + 1
+				first[nid] = first[cellId(c)] or n
+				table.insert(queue, n)
 			end
 		end
-	elseif Cyber.agentNPC ~= nil then
-		World.deleteNPC(Cyber.agentNPC)
-		Cyber.agentNPC = nil
 	end
+	return dist, first
+end
+Cyber.distances = distances
+
+-- The next room from a towards b.
+local function stepToward(L, a, b)
+	local dist, first = distances(L, a)
+	return first[cellId(b)], dist[cellId(b)]
+end
+
+local function vRoom()
+	local pos = World.playerTransform()
+	if pos == nil then return nil end
+	return roomAt(Cyber.floor, pos.x, pos.y)
+end
+
+local hunterNames = {
+	rival = { "a rival netrunner", "a merc netrunner", "a freelance runner" },
+	rogue = { "a rogue AI", "a fragment from beyond the Blackwall", "a feral AI" },
+}
+
+local function spawnHunter(h, room, from)
+	local floor = Cyber.floors[h.floor]
+	if floor == nil then return false end
+	local x, y = cellCentre(h.floor, floor.layout, room[1], room[2])
+	local yaw = 0
+	if from then
+		-- coming through the doorway from the room it was in
+		x = x + (from[1] - room[1]) * (Kit.roomSize / 2 - 2.5)
+		y = y + (from[2] - room[2]) * (Kit.roomSize / 2 - 2.5)
+		yaw = math.deg(math.atan2(room[1] - from[1], room[2] - from[2])) * -1
+	end
+	h.room = room
+	if h.id == nil then
+		h.id = World.spawnNPC(h.record, x, y, floor.z + 0.2, yaw)
+		h.hostile, h.disarmed = false, 0
+		return h.id ~= nil
+	end
+	return World.moveNPC(h.id, x, y, floor.z + 0.2, yaw)
+end
+
+local function addHunter(kind, record, floorIndex, room, extra)
+	local h = { kind = kind, record = record, floor = floorIndex, hop = 0,
+		mode = kind == "patrol" and "patrol" or "hunt" }
+	if extra then for k, v in pairs(extra) do h[k] = v end end
+	if not spawnHunter(h, room) then return nil end
+	table.insert(Cyber.hunters, h)
+	return h
+end
+
+-- A room on floor i at least `far` steps from V (the furthest it can find).
+local function farRoom(i, far, notGoal)
+	local floor = Cyber.floors[i]
+	local L = floor.layout
+	local here = (i == Cyber.floor and vRoom()) or L.start
+	local dist = distances(L, here)
+	local options, best, bestD = {}, nil, -1
+	for x = 0, L.w - 1 do
+		for y = 0, L.h - 1 do
+			local d = dist[x .. "," .. y] or 0
+			local isGoal = notGoal and x == L.goal[1] and y == L.goal[2]
+			if not isGoal then
+				if d >= far then table.insert(options, { x, y }) end
+				if d > bestD then best, bestD = { x, y }, d end
+			end
+		end
+	end
+	if #options > 0 then return options[math.floor(roll() * #options) + 1] or options[1] end
+	return best or L.start
+end
+
+local function removeHunter(h, keepBody)
+	if h.id then
+		local floor = Cyber.floors[h.floor]
+		if keepBody and floor then table.insert(floor.corpses, h.id) else World.deleteNPC(h.id) end
+	end
+	h.id, h.gone = nil, true
+end
+
+-- Patrols: the network's own ICE, on networks V doesn't own.
+local function spawnPatrols(i)
+	local floor = Cyber.floors[i]
+	local net = Network.get(Cyber.addr)
+	if floor == nil or floor.patrolled or net == nil then return end
+	floor.patrolled = true
+	if net.ice <= 0 or Network.isOwned(net.addr) or Cyber.bodySafe then return end
+	local org = Lore.getOrg(net.org)
+	local count = 1
+	if net.ice >= 5 or floor.layout.w * floor.layout.h >= 36 then count = 2 end
+	if net.ice >= 8 then count = 3 end
+	for _ = 1, count do
+		addHunter("patrol", Kit.iceRecord(net.org, org, false), i, farRoom(i, 3, true))
+	end
+end
+
+local function rewardFor(h)
+	local net = Network.get(Cyber.addr)
+	local tier = net and net.tier or 1
+	if h.kind == "rival" then
+		local eddies = math.floor((150 + roll() * 250) * tier)
+		World.giveMoney(eddies)
+		say("You derezzed " .. h.name .. ". Their deck shards fence for " .. eddies .. " eddies.", "ok")
+	elseif h.kind == "rogue" then
+		local eddies = math.floor((900 + roll() * 900) * tier)
+		World.giveMoney(eddies)
+		say("The rogue AI comes apart. What's left of its code is worth " .. eddies .. " eddies to the right buyer.", "ok")
+		Network.addNews("Unknown netrunner purges a rogue AI from " .. (net and net.name or "a network"))
+		emit("cyber.rogue_ai_defeated", { addr = Cyber.addr })
+	elseif h.kind == "agent" then
+		local _, message = NetWatch.win()
+		say(message, "ok")
+	elseif h.kind == "patrol" then
+		say("Patrol ICE derezzed.", "ok")
+	end
+	emit("cyber.hunter_defeated", { addr = Cyber.addr, kind = h.kind })
+end
+
+local function updateHunter(h, dt, here)
+	if h.gone then return end
+	if h.follow then
+		-- following V to another floor
+		h.follow = h.follow - dt
+		if h.follow <= 0 and Cyber.floors[h.floor] then
+			h.follow = nil
+			if spawnHunter(h, h.room) then
+				say((h.name or "Something") .. " followed you down here.", "err")
+			else
+				h.gone = true
+			end
+		end
+		return
+	end
+	if h.id == nil then h.gone = true return end -- (followers waiting for V have h.follow)
+	local dead = World.npcDead(h.id)
+	if dead == nil then return end -- still spawning
+	if dead == true then
+		removeHunter(h, true)
+		rewardFor(h)
+		return
+	end
+	if not h.hostile then h.hostile = World.makeHostile(h.id) end
+	if (h.disarmed or 0) < 6 then
+		World.disarm(h.id)
+		h.disarmed = (h.disarmed or 0) + 1
+	end
+	if h.floor ~= Cyber.floor then return end
+	local floor = Cyber.floors[h.floor]
+	local L = floor and floor.layout
+	if L == nil or here == nil then return end
+
+	-- where it really is (it may have walked)
+	local p = World.npcPosition(h.id)
+	if p then h.room = roomAt(h.floor, p.x, p.y) or h.room end
+	local _, steps = stepToward(L, h.room, here)
+	steps = steps or 99
+
+	if h.mode == "patrol" and steps <= Kit.patrolSight then
+		h.mode = "hunt"
+		say("Patrol ICE has picked up your trail.", "warn")
+		World.notify("ICE is hunting you")
+	end
+	if steps == 0 then
+		h.hop = 0
+		-- fighting the network's own ICE is loud
+		if h.kind == "patrol" then Cyber.addTrace(dt * 0.5) end
+		return
+	end
+
+	h.hop = h.hop + dt
+	local every = h.mode == "hunt" and Kit.huntHop or Kit.patrolHop
+	if h.hop < every then return end
+	h.hop = 0
+	local nextRoom
+	if h.mode == "hunt" then
+		nextRoom = stepToward(L, h.room, here)
+	else
+		local options = doorsFrom(L, h.room)
+		nextRoom = options[math.floor(roll() * #options) + 1] or options[1]
+	end
+	if nextRoom then spawnHunter(h, nextRoom, h.room) end
+	if h.mode == "hunt" and nextRoom and nextRoom[1] == here[1] and nextRoom[2] == here[2] and not h.announced then
+		h.announced = true
+		World.warn((h.name or "Something") .. " is here")
+	end
+end
+
+-- V went to floor i: followers come after them, patrols stay behind.
+local function huntersFollow(i, fromBelow)
+	local floor = Cyber.floors[i]
+	if floor == nil or floor.layout == nil then return end
+	local entry = fromBelow and floor.layout.goal or floor.layout.start
+	for _, h in ipairs(Cyber.hunters) do
+		if not h.gone and h.kind ~= "patrol" and h.floor ~= i and h.mode == "hunt" then
+			if h.id then World.deleteNPC(h.id) end
+			h.id, h.floor, h.room, h.follow = nil, i, entry, 6 + roll() * 6
+		end
+	end
+end
+
+local function clearHunters()
+	for _, h in ipairs(Cyber.hunters or {}) do removeHunter(h, false) end
+	Cyber.hunters, Cyber.agentNPC = {}, nil
+end
+Cyber.clearHunters = clearHunters
+Cyber.huntersFollow = huntersFollow
+
+local function activeCount(kinds)
+	local n = 0
+	for _, h in ipairs(Cyber.hunters) do
+		if not h.gone and kinds[h.kind] then n = n + 1 end
+	end
+	return n
+end
+
+-- Now and then something else turns up: on any network, even yours.
+local function rollEncounter(dt)
+	Cyber.encounterTimer = (Cyber.encounterTimer or 0) + dt
+	if Cyber.encounterTimer < Kit.encounterEvery then return end
+	Cyber.encounterTimer = 0
+	if Cyber.bodySafe then return end -- your own machine at home
+	if activeCount({ rival = true, rogue = true }) >= Kit.encounterMax then return end
+	local net = Network.get(Cyber.addr)
+	local tier = net and net.tier or 1
+	local floor = Cyber.floors[Cyber.floor]
+	if floor == nil or floor.layout == nil then return end
+	local r = roll()
+	local rogueChance = 0.03 + 0.02 * tier + (Cyber.floor >= Kit.deepFloor and 0.03 or 0)
+	local rivalChance = 0.12 + 0.03 * tier
+	local kind
+	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance then kind = "rival" else return end
+	local list = kind == "rogue" and Kit.rogueAI or Kit.rivals
+	local names = hunterNames[kind]
+	local name = names[math.floor(roll() * #names) + 1] or names[1]
+	local h = addHunter(kind, list[math.floor(roll() * #list) + 1] or list[1], Cyber.floor, farRoom(Cyber.floor, 3, false), { name = name })
+	if h == nil then return end
+	if kind == "rogue" then
+		say("Something else is in here with you: " .. name .. ". It knows where you are.", "err")
+		World.warn("Rogue AI in the network")
+	else
+		say("You're not alone: " .. name .. " is working this network, and wants you out of it.", "warn")
+		World.warn("Rival netrunner")
+	end
+	emit("cyber.encounter", { addr = Cyber.addr, kind = kind, floor = Cyber.floor })
+end
+
+-- The NetWatch agent who traced into this network comes for V in person.
+local function updateAgent()
+	local agent = NetWatch.agent
+	local mine
+	for _, h in ipairs(Cyber.hunters) do
+		if h.kind == "agent" and not h.gone then mine = h end
+	end
+	if agent and agent.addr == Cyber.addr and agent.eta <= 0 then
+		if mine == nil and not Cyber.agentFought then
+			local floor = Cyber.floors[Cyber.floor]
+			if floor and floor.layout then
+				mine = addHunter("agent", Kit.netwatch, Cyber.floor, farRoom(Cyber.floor, 99, false), { name = agent.name })
+				if mine then
+					Cyber.agentFought = true
+					say(agent.name .. " is in the network, on the far side of this floor, and closing on you.", "err")
+					World.warn("NetWatch is coming")
+				end
+			end
+		end
+	elseif mine then
+		removeHunter(mine, false)
+	end
+	if agent == nil then Cyber.agentFought = false end
+	Cyber.agentNPC = mine and not mine.gone and mine.id or nil
+end
+
+local function updateHunters(dt)
+	spawnPatrols(Cyber.floor)
+	updateAgent()
+	rollEncounter(dt)
+	local here = vRoom()
+	for _, h in ipairs(Cyber.hunters) do updateHunter(h, dt, here) end
+	local kept = {}
+	for _, h in ipairs(Cyber.hunters) do if not h.gone then table.insert(kept, h) end end
+	Cyber.hunters = kept
+	updateAgent()
+end
+
+-- The deeper V goes into a network that isn't theirs, the easier V is to find.
+local function updateDepth(dt)
+	local net = Network.get(Cyber.addr)
+	if net == nil or Cyber.bodySafe or Network.isOwned(net.addr) or Cyber.floor < Kit.deepFloor then return end
+	local depth = Cyber.floor - Kit.deepFloor + 1
+	Cyber.addTrace(dt * Kit.deepTrace * depth * (1 + 0.5 * (net.tier or 1)))
+	if (Cyber.deepWarned or 0) < Cyber.floor then
+		Cyber.deepWarned = Cyber.floor
+		say("Deep in " .. net.name .. ". Every second down here makes you easier to trace.", "warn")
+	end
+end
+
+---------------------------------------------------------------------------
+-- Scanning: a map of the rooms around V
+---------------------------------------------------------------------------
+
+-- Returns ok, text.
+function Cyber.scan()
+	if not Cyber.active or Cyber.phase ~= "in" then return false, "Scan works in cyberspace. 'jackin' first." end
+	local floor = Cyber.floors[Cyber.floor]
+	local here = vRoom()
+	if floor == nil or floor.layout == nil or here == nil then return false, "Nothing to scan yet." end
+	local L = floor.layout
+	local net = Network.get(Cyber.addr)
+	local free = Cyber.bodySafe or Network.isOwned(net.addr)
+	if not free then Cyber.addTrace(Kit.scanTrace) end
+	if not Cyber.active then return false, "The scan gave you away." end
+
+	-- every room within range, by the route to it (the deck's font isn't
+	-- monospaced, so routes rather than a drawn map)
+	local range = Kit.scanRange
+	local function dirName(a, b)
+		if b[1] > a[1] then return "east" elseif b[1] < a[1] then return "west"
+		elseif b[2] > a[2] then return "north" end
+		return "south"
+	end
+	local routes, order = { [cellId(here)] = {} }, {}
+	local queue = { here }
+	while #queue > 0 do
+		local c = table.remove(queue, 1)
+		local route = routes[cellId(c)]
+		if #route < range then
+			for _, n in ipairs(doorsFrom(L, c)) do
+				if routes[cellId(n)] == nil then
+					local r = { unpack(route) }
+					table.insert(r, dirName(c, n))
+					routes[cellId(n)] = r
+					table.insert(order, n)
+					table.insert(queue, n)
+				end
+			end
+		end
+	end
+
+	local found = {}
+	local function note(c, text)
+		local id = cellId(c)
+		if routes[id] == nil then return end
+		found[id] = found[id] or {}
+		for _, v in ipairs(found[id]) do if v == text then return end end
+		table.insert(found[id], text)
+	end
+	for _, o in ipairs(floor.objects) do
+		local c = roomAt(Cyber.floor, o.x, o.y)
+		if c then
+			if o.kind == "file" then note(c, "data")
+			elseif o.kind == "console" then note(c, "device control")
+			elseif o.kind == "core" then note(c, "the network core")
+			elseif o.kind == "up" or o.kind == "exit" then note(c, "the way back up")
+			end
+		end
+	end
+	local floors = Network.floors(net)
+	if Cyber.floor < #floors then note(L.goal, floor.gate and "the way down (sealed)" or "the way down") end
+	local hostiles = 0
+	local function hostileAt(c, what)
+		if c and routes[cellId(c)] then
+			note(c, what)
+			hostiles = hostiles + 1
+		end
+	end
+	for _, h in ipairs(Cyber.hunters) do
+		if not h.gone and h.id and h.floor == Cyber.floor then
+			local what = ({ patrol = "patrol ICE", rival = "a rival netrunner", rogue = "a rogue AI", agent = "NetWatch" })[h.kind]
+			hostileAt(h.room, (what or "something") .. "!")
+		end
+	end
+	for _, id in ipairs(floor.ice) do
+		local p = World.npcPosition(id)
+		hostileAt(p and roomAt(Cyber.floor, p.x, p.y), "ICE guarding the doorway!")
+	end
+
+	local lines = { "SCAN - floor " .. Cyber.floor .. (free and "" or " (+" .. Kit.scanTrace .. "% trace)") }
+	local exits = {}
+	for _, n in ipairs(doorsFrom(L, here)) do
+		local text = dirName(here, n)
+		if #doorsFrom(L, n) == 1 then text = text .. " (dead end)" end
+		table.insert(exits, text)
+	end
+	table.insert(lines, "Doorways here: " .. (#exits > 0 and table.concat(exits, ", ") or "none"))
+	if found[cellId(here)] then table.insert(lines, "This room: " .. table.concat(found[cellId(here)], ", ")) end
+	for _, c in ipairs(order) do
+		local things = found[cellId(c)]
+		if things then table.insert(lines, "  " .. table.concat(routes[cellId(c)], ", then ") .. ": " .. table.concat(things, ", ")) end
+	end
+	local dist = distances(L, here)
+	local goalSteps = dist[cellId(L.goal)]
+	if Cyber.floor < #floors and goalSteps and goalSteps > range then
+		table.insert(lines, "The way down is " .. goalSteps .. " rooms away, beyond the scan.")
+	end
+	if hostiles == 0 then table.insert(lines, "Nothing hostile nearby.") end
+	local text = table.concat(lines, "\n")
+	World.notify("Scan: " .. (goalSteps and ("way down " .. goalSteps .. (goalSteps == 1 and " room" or " rooms") .. " away") or "done") ..
+		(hostiles > 0 and (", " .. hostiles .. " hostile nearby") or ""))
+	emit("cyber.scan", { addr = Cyber.addr, floor = Cyber.floor })
+	return true, text
 end
 
 ---------------------------------------------------------------------------
@@ -932,7 +1381,10 @@ function Cyber.update(dt)
 		refreshGates()
 		updateIce(step)
 		if not Cyber.active then return end
-		updateAgent()
+		updateHunters(step)
+		if not Cyber.active then return end
+		updateDepth(step)
+		if not Cyber.active then return end
 		updateBody(step)
 	end
 end

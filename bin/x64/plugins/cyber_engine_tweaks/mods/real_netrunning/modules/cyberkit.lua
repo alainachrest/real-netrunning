@@ -71,6 +71,30 @@ Kit.ice = {
 }
 Kit.netwatch = "Character.cpz_netwatch_agent_netrunner3_omaha_elite"
 
+-- Other things that can be found in any network, even ones you own.
+Kit.rivals = {
+	"Character.afterlife_merc_netrunner_m_hard",
+	"Character.afterlife_netrunner_netrunner2_yukimura_wa_rare",
+	"Character.sts_ep1_06_enemy_netrunner_rare_suit_ma",
+	"Character.generic_netrunner_netrunner_chao_ma_rare",
+}
+Kit.rogueAI = {
+	"Character.kangtao_base_android",
+	"Character.militech_base_android",
+	"Character.security_android_android2_lexington_ma",
+}
+
+-- How cyberspace pushes back
+Kit.encounterEvery = 30      -- seconds between rolls for a rival or rogue AI
+Kit.encounterMax = 2         -- at most this many at once
+Kit.patrolHop = 6            -- seconds between a patrol's moves
+Kit.huntHop = 3              -- seconds between a hunter's moves
+Kit.patrolSight = 2          -- rooms away (through doorways) a patrol notices V from
+Kit.deepFloor = 3            -- from this floor down, unowned networks raise trace...
+Kit.deepTrace = 0.08         -- ...by this much per second for each floor from there, more on bigger networks
+Kit.scanTrace = 6            -- what 'cyber scan' costs (free on networks you own)
+Kit.scanRange = 3            -- how many rooms (through doorways) a scan reaches
+
 function Kit.iceRecord(orgId, org, black)
 	if black then return Kit.ice.black end
 	return Kit.ice[orgId] or Kit.ice[org.kind] or Kit.ice.corp

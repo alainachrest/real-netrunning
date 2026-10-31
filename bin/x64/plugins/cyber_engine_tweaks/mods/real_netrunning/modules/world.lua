@@ -177,6 +177,26 @@ function World.deleteNPC(id)
 	try(function() Game.GetDynamicEntitySystem():DeleteEntity(id) end)
 end
 
+-- Moves a spawned NPC (cyberspace hunters go from room to room this way).
+function World.moveNPC(id, x, y, z, yaw)
+	return try(function()
+		local npc = Game.FindEntityByID(id)
+		if npc == nil then return false end
+		Game.GetTeleportationFacility():Teleport(npc, Vector4.new(x, y, z, 1.0), EulerAngles.new(0, 0, yaw or 0))
+		return true
+	end) == true
+end
+
+-- Where a spawned NPC is: { x, y, z }, or nil.
+function World.npcPosition(id)
+	return try(function()
+		local npc = Game.FindEntityByID(id)
+		if npc == nil then return nil end
+		local p = npc:GetWorldPosition()
+		return { x = p.x, y = p.y, z = p.z }
+	end)
+end
+
 -- true dead, false alive, nil not spawned (yet).
 function World.npcDead(id)
 	local result = try(function()
