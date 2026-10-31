@@ -59,37 +59,39 @@ Kit.templates = {
 	passwordGate   = "base\\quest\\main_quests\\part1\\q116\\entities\\q116_cyberspace_invisible_wall.ent",
 }
 
--- ICE takes the form of the owner's own netrunners. Black ICE is elite.
+-- Everything in cyberspace fights the way V has to there: bare hands (fists or
+-- Gorilla Arms). Netrunner characters come with guns they keep drawing, and
+-- with their guns taken away they don't fight at all, so cyberspace's fighters
+-- are the game's own brawlers, chosen to suit each network's owner. Black ICE
+-- and NetWatch are elite Gorilla Arms and martial artists.
 Kit.ice = {
-	gang     = "Character.nid_maelstrom_netrunner_m_medium",
-	maelstrom = "Character.nid_maelstrom_netrunner_m_medium",
-	tygerclaws = "Character.tygerclaw_gangster3_netrunner_nue_wa_rare",
-	valentinos = "Character.generic_netrunner_netrunner_chao_wa_rare",
-	sixthstreet = "Character.nid_generic_netrunner_netrunner_chao_ma_rare",
-	arasaka  = "Character.dtn_arasaka_netrunner_netrunner2_yukimura_wa_rare",
-	corp     = "Character.dtn_security_netrunner_netrunner2_lexington_ma_rare",
-	police   = "Character.dtn_security_netrunner_netrunner2_lexington_ma_rare",
-	media    = "Character.afterlife_merc_netrunner_w_easy",
-	civilian = "Character.afterlife_merc_netrunner_w_easy",
-	device   = "Character.afterlife_merc_netrunner_w_easy",
-	black    = "Character.high_voodooboys_netrunner3_netrunner3_quasar_wa_elite",
+	gang        = "Character.animals_grunt2_hmelee2_fists_wba_rare",
+	maelstrom   = "Character.nid_scavenger_grunt1_melee1_fists_ma",
+	tygerclaws  = "Character.jpn_tyger_claws_gangster1_melee1_fists_ma",
+	valentinos  = "Character.gle_valentinos_grunt4_hmelee2_fists_mb_rare",
+	sixthstreet = "Character.animals_bouncer2_melee2_fists_mb",
+	arasaka     = "Character.arasaka_rare2_hmelee3_fists_mm_elite",
+	militech    = "Character.militech_strongarms_hmelee3_fists_mb_elite",
+	corp        = "Character.arasaka_bodyguard_hmelee2_fists_mb_rare",
+	police      = "Character.dtn_security_security1_hmelee2_fists_mb_rare",
+	media       = "Character.hil_security_security1_hmelee2_fists_mb_rare",
+	civilian    = "Character.cpz_animals_bouncer2_melee2_fists_mb",
+	device      = "Character.hil_security_security1_hmelee2_fists_mb_rare",
+	black       = "Character.militech_strongarms_hmelee3_fists_mb_elite",
 }
-Kit.netwatch = "Character.cpz_netwatch_agent_netrunner3_omaha_elite"
+Kit.netwatch = "Character.prevention_dogtown_martial_hmelee3_fists_mb_elite"
 
 -- Other things that can be found in any network, even ones you own.
--- (ordinary freelance netrunners only: quest characters can be unkillable)
+-- (ordinary open-world characters only: quest characters can be unkillable)
 Kit.rivals = {
-	"Character.afterlife_merc_netrunner_m_hard",
-	"Character.afterlife_merc_netrunner_w_medium",
-	"Character.afterlife_netrunner_netrunner2_yukimura_wa_rare",
-	"Character.generic_netrunner_netrunner_chao_wa_rare",
-	"Character.nid_generic_netrunner_netrunner_chao_ma_rare",
-	"Character.nid_scavenger_netrunner2_netrunner2_nova_wa_rare",
+	"Character.jpn_tyger_claws_kunoichi_fmelee3_fists_ma_elite",
+	"Character.animals_elite3_hmelee3_fists_mba_elite",
+	"Character.animals_elite2_hmelee2_fists_mba_rare",
+	"Character.jpn_tyger_claws_martial_hmelee3_StrongArms_mb",
 }
+-- a rogue AI wearing the body it found: a boxing robot
 Kit.rogueAI = {
-	"Character.kangtao_base_android",
-	"Character.militech_base_android",
-	"Character.security_android_android2_lexington_ma",
+	"Character.boxingrobot_hard",
 }
 
 -- How cyberspace pushes back
