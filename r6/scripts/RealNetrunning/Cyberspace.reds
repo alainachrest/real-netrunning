@@ -37,6 +37,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_backFit: ref<RNMeshFit>;   // solid backing behind floors and ceilings
     private let m_lightLevel: Float;   // 'cyber light': brightness multiplier
     private let m_lightColour: Int32;  // 'cyber light': colour preset
+    private let m_markerFits: array<ref<RNMeshFit>>; // one per marker mesh (see RNMarkerMesh)
 
     // the size and kind of each block Lua asked for, looked up when it's built
     private let m_pending: Vector4;  // half x, half y, half z, kind
@@ -58,6 +59,13 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.m_floorFit = this.LoadFit(RNFloorMesh(this.m_style), this.m_style, n"OnFloorMeshLoaded");
         this.m_wallFit = this.LoadFit(RNWallMesh(this.m_wallStyle), this.m_wallStyle, n"OnWallMeshLoaded");
         this.m_backFit = this.LoadFit(RNBackingMesh(), 0, n"OnBackingMeshLoaded");
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(0), 0, n"OnMarker0Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(1), 1, n"OnMarker1Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(2), 2, n"OnMarker2Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(3), 3, n"OnMarker3Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(4), 4, n"OnMarker4Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(5), 5, n"OnMarker5Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(6), 6, n"OnMarker6Loaded"));
         GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnBlockExtract")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
@@ -99,6 +107,19 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         this.Fill(this.m_backFit, token);
     }
 
+    private func FillMarker(i: Int32, token: ref<ResourceToken>) {
+        if i < ArraySize(this.m_markerFits) {
+            this.Fill(this.m_markerFits[i], token);
+        }
+    }
+    private cb func OnMarker0Loaded(token: ref<ResourceToken>) { this.FillMarker(0, token); }
+    private cb func OnMarker1Loaded(token: ref<ResourceToken>) { this.FillMarker(1, token); }
+    private cb func OnMarker2Loaded(token: ref<ResourceToken>) { this.FillMarker(2, token); }
+    private cb func OnMarker3Loaded(token: ref<ResourceToken>) { this.FillMarker(3, token); }
+    private cb func OnMarker4Loaded(token: ref<ResourceToken>) { this.FillMarker(4, token); }
+    private cb func OnMarker5Loaded(token: ref<ResourceToken>) { this.FillMarker(5, token); }
+    private cb func OnMarker6Loaded(token: ref<ResourceToken>) { this.FillMarker(6, token); }
+
     // Lua waits for this before building (it gives up after a few seconds).
     public func FloorReady() -> Bool {
         return IsDefined(this.m_floorFit) && this.m_floorFit.ready && IsDefined(this.m_wallFit) && this.m_wallFit.ready
@@ -137,11 +158,15 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     }
 
     private func MakeLight(radius: Float, lumens: Float, z: Float) -> ref<LightComponent> {
+        return this.MakeColouredLight(RNLightColour(this.m_lightColour), radius, lumens, z);
+    }
+
+    private func MakeColouredLight(colour: Color, radius: Float, lumens: Float, z: Float) -> ref<LightComponent> {
         // the plain light component is always on (the game's gameLightComponent
         // starts switched off and waits to be turned on, like a lamp)
         let light = new LightComponent();
         light.type = ELightType.LT_Point;
-        light.color = RNLightColour(this.m_lightColour);
+        light.color = colour;
         light.unit = ELightUnit.LU_Lumen;
         light.intensity = lumens * this.m_lightLevel;
         light.radius = radius;
@@ -186,6 +211,53 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             ", backing " + this.SizeText(this.m_backFit);
     }
 
+    // --- markers: what V can use, made visible ----------------------------------------
+
+    // A mesh scaled evenly (no stretching) so its largest side is `size` metres,
+    // standing with its base `lift` metres above the entity's origin.
+    private func FitUniform(template: ref<EntityBuilderTemplateWrapper>, fit: ref<RNMeshFit>, path: ResRef,
+                            lift: Float, size: Float) {
+        if !IsDefined(fit) || !fit.ready {
+            return;
+        }
+        let largest = MaxF(fit.max.X - fit.min.X, MaxF(fit.max.Y - fit.min.Y, fit.max.Z - fit.min.Z));
+        let s = size / MaxF(0.01, largest);
+        let cx = (fit.max.X + fit.min.X) / 2.0;
+        let cy = (fit.max.Y + fit.min.Y) / 2.0;
+        let mesh = new MeshComponent();
+        mesh.mesh *= path;
+        mesh.meshAppearance = n"default";
+        mesh.visualScale = Vector3(s, s, s);
+        let place: WorldTransform;
+        WorldTransform.SetPosition(place, Vector4(-cx * s, -cy * s, lift - fit.min.Z * s, 1.0));
+        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        mesh.localTransform = place;
+        mesh.isEnabled = true;
+        template.AddComponent(mesh);
+    }
+
+    // Every usable thing gets its own mesh and a pool of coloured light, so it
+    // can be seen from across a room (see RNMarker* below for which is which).
+    private func AddMarker(template: ref<EntityBuilderTemplateWrapper>, kind: Int32, size: Float) {
+        let index = RNMarkerMeshIndex(kind);
+        if index >= 0 && index < ArraySize(this.m_markerFits) {
+            this.FitUniform(template, this.m_markerFits[index], RNMarkerMesh(index), RNMarkerLift(kind), size);
+        }
+        let lumens = RNMarkerLumens(kind) * MaxF(0.3, this.m_lightLevel);
+        template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), size + 4.0, lumens, RNMarkerLift(kind) + size * 0.5));
+    }
+
+    // For 'cyber debug': how many marker meshes have loaded.
+    public func MarkersLoaded() -> Int32 {
+        let n = 0;
+        for fit in this.m_markerFits {
+            if IsDefined(fit) && fit.ready {
+                n += 1;
+            }
+        }
+        return n;
+    }
+
     // --- blocks --------------------------------------------------------------------
 
     // kind 0: floor slab (its mesh's top is the top of the box)
@@ -193,6 +265,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     // kind 2: ceiling (the floor mesh upside down, its face on the underside of the box)
     // kind 3: solid dark block (the outer shell of a floor, corner pillars)
     // kind 4: a light (no collider, nothing to see): the room's own glow
+    // kind 10 and up: a marker (no collider): hx is its size (see RNMarker*)
     public func SpawnBlock(x: Float, y: Float, z: Float, yaw: Float, hx: Float, hy: Float, hz: Float, kind: Int32) -> EntityID {
         this.m_pending = Vector4(hx, hy, hz, Cast<Float>(kind));
         let rotation: EulerAngles;
@@ -240,6 +313,10 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
         if kind == 4 {
             this.AddLight(template, size.X);
+            return;
+        }
+        if kind >= 10 {
+            this.AddMarker(template, kind, size.X);
             return;
         }
 
@@ -436,6 +513,69 @@ public func RNLightColour(i: Int32) -> Color {
         c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(250); c.Blue = Cast<Uint8>(240);
     } else {
         c.Red = Cast<Uint8>(120); c.Green = Cast<Uint8>(220); c.Blue = Cast<Uint8>(255);
+    }
+    return c;
+}
+
+// --- markers -------------------------------------------------------------------------
+// kind 10 data, 11 paydata, 12 data already taken, 13 way down, 14 way up,
+// 15 jack-out node, 16 sealed doorway, 17 device console, 18 network core
+
+public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
+    if kind == 10 || kind == 11 || kind == 12 { return 0; }
+    if kind == 13 { return 1; }
+    if kind == 14 { return 2; }
+    if kind == 15 { return 3; }
+    if kind == 16 { return 4; }
+    if kind == 17 { return 5; }
+    if kind == 18 { return 6; }
+    return -1;
+}
+
+public func RNMarkerMesh(index: Int32) -> ResRef {
+    if index == 1 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_portal_frontier_a.mesh"; }
+    if index == 2 { return r"base\\environment\\decoration\\advertising\\holograms\\hologram_light_beam.mesh"; }
+    if index == 3 { return r"base\\environment\\decoration\\advertising\\holograms\\common\\common_holograms_a_exit.mesh"; }
+    if index == 4 { return r"base\\environment\\decoration\\electronics\\security\\office_security_gate\\office_security_gate_hologram_a.mesh"; }
+    if index == 5 { return r"base\\environment\\decoration\\unique\\quest\\q101_mikoshi_access_point\\q101_mikoshi_access_point_a.mesh"; }
+    if index == 6 { return r"ep1\\environment\\quests\\q305_cynosure_core\\q305_brain_hologram.mesh"; }
+    return r"base\\gameplay\\devices\\custom\\hologram_holosphere_displayed_mesh.mesh";
+}
+
+// how far above the floor each marker floats
+public func RNMarkerLift(kind: Int32) -> Float {
+    if kind == 10 || kind == 11 || kind == 12 { return 0.9; }
+    if kind == 15 { return 1.6; }
+    if kind == 18 { return 0.8; }
+    return 0.0;
+}
+
+public func RNMarkerLumens(kind: Int32) -> Float {
+    if kind == 12 { return 600.0; }
+    if kind == 13 || kind == 18 { return 6000.0; }
+    if kind == 16 { return 4000.0; }
+    return 3000.0;
+}
+
+public func RNMarkerColour(kind: Int32) -> Color {
+    let c: Color;
+    c.Alpha = Cast<Uint8>(255);
+    if kind == 11 {        // paydata: gold
+        c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(200); c.Blue = Cast<Uint8>(60);
+    } else if kind == 12 { // taken: dim grey
+        c.Red = Cast<Uint8>(120); c.Green = Cast<Uint8>(120); c.Blue = Cast<Uint8>(130);
+    } else if kind == 13 { // way down: green
+        c.Red = Cast<Uint8>(80); c.Green = Cast<Uint8>(255); c.Blue = Cast<Uint8>(120);
+    } else if kind == 14 || kind == 15 { // way up, jack out: white
+        c.Red = Cast<Uint8>(240); c.Green = Cast<Uint8>(245); c.Blue = Cast<Uint8>(255);
+    } else if kind == 16 { // sealed: red
+        c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(40); c.Blue = Cast<Uint8>(50);
+    } else if kind == 17 { // console: orange
+        c.Red = Cast<Uint8>(255); c.Green = Cast<Uint8>(140); c.Blue = Cast<Uint8>(40);
+    } else if kind == 18 { // core: violet
+        c.Red = Cast<Uint8>(190); c.Green = Cast<Uint8>(80); c.Blue = Cast<Uint8>(255);
+    } else {               // data: cyan
+        c.Red = Cast<Uint8>(90); c.Green = Cast<Uint8>(230); c.Blue = Cast<Uint8>(255);
     }
     return c;
 }

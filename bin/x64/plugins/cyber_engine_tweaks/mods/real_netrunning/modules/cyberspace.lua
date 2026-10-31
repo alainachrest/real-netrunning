@@ -228,11 +228,38 @@ local function floorFiles(net, i, f)
 	return list
 end
 
+-- Which marker an object shows (see Kit.markers), or nil for none.
+local function markerKind(o)
+	if o.kind == "file" then
+		if o.node and o.node.paydata then
+			if Network.state.looted[Cyber.addr .. ":" .. o.path] then return Kit.markers.taken end
+			return Kit.markers.paydata
+		end
+		return Kit.markers.file
+	end
+	return Kit.markers[o.kind]
+end
+
+-- Shows (or updates, or removes) an object's marker to match its state.
+local function showObject(o)
+	local kind = markerKind(o)
+	if o.markerId and o.markerKind == kind then return end
+	if o.markerId then World.despawnProp(o.markerId) o.markerId = nil end
+	o.markerKind = kind
+	if kind == nil then return end
+	local size = Kit.markerSize[kind] or 1.0
+	o.markerId = World.spawnBlock(o.x, o.y, o.z, o.yaw or 0, size, size, size, kind)
+	local floor = Cyber.floors[o.floor]
+	if floor and o.markerId then table.insert(floor.props, o.markerId) end
+end
+Cyber.showObject = showObject
+
 local function addObject(i, kind, x, y, z, label, extra)
 	local o = { floor = i, kind = kind, x = x, y = y, z = z, label = label }
 	if extra then for k, v in pairs(extra) do o[k] = v end end
 	table.insert(Cyber.objects, o)
 	table.insert(Cyber.floors[i].objects, o)
+	showObject(o)
 	return o
 end
 
@@ -301,6 +328,10 @@ local function buildFloor(net, i, f, count)
 			block(floor, { x = rx, y = ry, z = cz - 0.5, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.5, kind = 0 })
 			-- each room's own glow, just under the ceiling
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight - 0.8, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.1, kind = 4 })
+			-- cyberspace particles drifting through the room
+			if Kit.particleRooms > 0 and (x + y) % Kit.particleRooms == 0 then
+				prop(floor.props, Kit.templates.roomParticles, rx, ry, cz + Kit.wallHeight / 2, 0)
+			end
 			-- a ceiling on top of the walls, so nothing outside cyberspace shows
 			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight + 0.25, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.25, kind = 2 })
 			if x == 0 then wall(floor, "y", rx - r / 2, ry, cz, false) end
@@ -366,15 +397,12 @@ local function buildFloor(net, i, f, count)
 	local files = floorFiles(net, i, f)
 	for k, file in ipairs(files) do
 		local x, y = place(k)
-		prop(floor.props, Kit.templates.data, x, y, cz, 0)
 		addObject(i, "file", x, y, cz, fileLabel(net, file), { path = file.path, node = file.node })
 	end
 	if f.kind == "control" then
 		local x, y = place(#files + 1)
-		prop(floor.props, Kit.templates.console, x, y, cz, 0)
 		addObject(i, "console", x, y, cz, "Device control")
 	elseif f.kind == "core" then
-		prop(floor.props, Kit.templates.core, gx, gy, cz, 0)
 		addObject(i, "core", gx, gy + 3, cz, "Network core")
 	end
 end
@@ -403,12 +431,17 @@ local function refreshGates()
 				Kit.doorWidth / 2 + 0.2, Kit.wallThickness, Kit.wallHeight / 2, 1)
 			floor.gate = { barrier = barrier }
 			if floor.gateUse then
-				floor.gateObject = addObject(i, "gate", floor.gateUse.x, floor.gateUse.y, floor.z, "Sealed doorway")
+				floor.gateObject = addObject(i, "gate", floor.gateUse.x, floor.gateUse.y, floor.z, "Sealed doorway",
+					{ yaw = door.along == "x" and 0 or 90 })
 			end
 		elseif not lock and floor.gate ~= nil then
 			World.despawnProp(floor.gate.barrier)
 			floor.gate = nil
-			if floor.gateObject then floor.gateObject.kind = "spent" floor.gateObject = nil end
+			if floor.gateObject then
+				floor.gateObject.kind = "spent"
+				showObject(floor.gateObject)
+				floor.gateObject = nil
+			end
 			if #floor.ice > 0 then
 				for _, id in ipairs(floor.ice) do World.deleteNPC(id) end
 				floor.ice, floor.iceHostile = {}, {}
@@ -697,6 +730,7 @@ function Cyber.use()
 		if o.node.paydata and not Network.state.looted[key] then
 			Cyber.run("download " .. o.path)
 			o.label = fileLabel(net, o)
+			showObject(o)
 			World.notify("Downloaded " .. o.path:match("([^/]+)$"))
 		else
 			Cyber.run("cat " .. o.path)
@@ -1415,7 +1449,8 @@ function Cyber.debug()
 		", entities " .. withEntity .. ", with collider " .. withCollider)
 	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
-		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")))
+		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
+		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/7")
 	local failed = {}
 	for name in pairs(Cyber.failedProps or {}) do table.insert(failed, name) end
 	if #failed > 0 then table.insert(lines, "props that didn't spawn: " .. table.concat(failed, ", ")) end

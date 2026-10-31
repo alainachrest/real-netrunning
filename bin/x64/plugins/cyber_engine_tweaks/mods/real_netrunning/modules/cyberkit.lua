@@ -44,6 +44,9 @@ Kit.templates = {
 	floor          = "base\\worlds\\03_night_city\\sectors\\c_city_center\\corpo_plaza\\loc_q116_mikoshi_cyberspace\\mikoshi_plates.ent",
 	floorCore      = "base\\quest\\main_quests\\part1\\q116\\entities\\q116_cyberspace_well_floor.ent",
 
+	-- cyberspace particles drifting through every room
+	roomParticles  = "base\\fx\\meshes\\cyberparticles\\cyberparticles.ent",
+
 	-- things on floors
 	data           = "base\\fx\\meshes\\cyberparticles\\q110_platforms.ent",
 	console        = "base\\fx\\meshes\\cyberparticles\\mikoshi_prison_cells.ent",
@@ -94,6 +97,14 @@ Kit.deepFloor = 3            -- from this floor down, unowned networks raise tra
 Kit.deepTrace = 0.08         -- ...by this much per second for each floor from there, more on bigger networks
 Kit.scanTrace = 6            -- what 'cyber scan' costs (free on networks you own)
 Kit.scanRange = 3            -- how many rooms (through doorways) a scan reaches
+
+-- Everything V can use is marked so it can be seen across a room: a mesh and a
+-- pool of coloured light (Cyberspace.reds, RNMarker*). Block kinds:
+Kit.markers = { file = 10, paydata = 11, taken = 12, down = 13, up = 14, exit = 15, gate = 16, console = 17, core = 18 }
+-- how big each one is, in metres
+Kit.markerSize = { [10] = 0.9, [11] = 0.9, [12] = 0.7, [13] = 4.5, [14] = 4.0, [15] = 2.2, [16] = 3.6, [17] = 1.8, [18] = 4.0 }
+-- cyberspace particles in every room (1), every other room (2), or none (0)
+Kit.particleRooms = 1
 
 function Kit.iceRecord(orgId, org, black)
 	if black then return Kit.ice.black end
