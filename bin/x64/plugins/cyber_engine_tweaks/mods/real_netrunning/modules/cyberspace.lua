@@ -74,7 +74,7 @@ Cyber.armedRecords = {}   -- fighters found carrying guns: never used again this
 -- The record to spawn for a fighter: the one asked for, unless it's known to
 -- carry a gun, in which case the first fallback brawler that isn't.
 local function fighterRecord(record)
-	if not Cyber.armedRecords[record] then return record end
+	if not Kit.combatRules or not Cyber.armedRecords[record] then return record end
 	for _, r in ipairs(Kit.fallbackBrawlers) do
 		if not Cyber.armedRecords[r] then return r end
 	end
@@ -908,7 +908,7 @@ local function updateIce(dt)
 			-- ICE fights like V: bare hands. One that turns out to carry a gun is
 			-- swapped for a fist fighter where it stands.
 			local rec = floor.iceRecords and floor.iceRecords[id]
-			if rec and carriesGun(id, rec, Cyber.gunChecked) then
+			if Kit.combatRules and rec and carriesGun(id, rec, Cyber.gunChecked) then
 				local p = World.npcPosition(id)
 				World.deleteNPC(id)
 				local newRec = fighterRecord(rec)
@@ -1148,7 +1148,7 @@ local function updateHunter(h, dt, here)
 	end
 	if not h.hostile then h.hostile = World.makeHostile(h.id) end
 	-- a fighter carrying a gun is swapped for a fist fighter where it stands
-	if carriesGun(h.id, h.actualRecord or h.record, Cyber.gunChecked) then
+	if Kit.combatRules and carriesGun(h.id, h.actualRecord or h.record, Cyber.gunChecked) then
 		World.deleteNPC(h.id)
 		h.id = nil
 		h.record = fighterRecord(h.actualRecord or h.record)
@@ -1410,8 +1410,10 @@ local function updateHunters(dt)
 	rollEncounter(dt)
 	local here = vRoom()
 	for _, h in ipairs(Cyber.hunters) do updateHunter(h, dt, here) end
-	updateEnemyHacks(dt, here)
-	if not Cyber.active then return end
+	if Kit.combatRules then
+		updateEnemyHacks(dt, here)
+		if not Cyber.active then return end
+	end
 	local kept = {}
 	for _, h in ipairs(Cyber.hunters) do if not h.gone then table.insert(kept, h) end end
 	Cyber.hunters = kept
@@ -1701,7 +1703,7 @@ function Cyber.update(dt)
 		end
 	end
 
-	updateWeapons(dt)
+	if Kit.combatRules then updateWeapons(dt) end
 
 	if World.healthPercent() < 15 then
 		local lock = lockAfter(Cyber.floor)
