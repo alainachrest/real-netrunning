@@ -1450,7 +1450,7 @@ function Cyber.debug()
 	table.insert(lines, "props: asked " .. (Cyber.propsAsked or 0) .. ", got IDs " .. props .. ", spawned " .. propsSpawned)
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
 		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
-		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/7")
+		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/8")
 	local failed = {}
 	for name in pairs(Cyber.failedProps or {}) do table.insert(failed, name) end
 	if #failed > 0 then table.insert(lines, "props that didn't spawn: " .. table.concat(failed, ", ")) end

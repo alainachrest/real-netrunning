@@ -66,6 +66,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(4), 4, n"OnMarker4Loaded"));
         ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(5), 5, n"OnMarker5Loaded"));
         ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(6), 6, n"OnMarker6Loaded"));
+        ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(7), 7, n"OnMarker7Loaded"));
         GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnBlockExtract")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
@@ -119,6 +120,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private cb func OnMarker4Loaded(token: ref<ResourceToken>) { this.FillMarker(4, token); }
     private cb func OnMarker5Loaded(token: ref<ResourceToken>) { this.FillMarker(5, token); }
     private cb func OnMarker6Loaded(token: ref<ResourceToken>) { this.FillMarker(6, token); }
+    private cb func OnMarker7Loaded(token: ref<ResourceToken>) { this.FillMarker(7, token); }
 
     // Lua waits for this before building (it gives up after a few seconds).
     public func FloorReady() -> Bool {
@@ -249,6 +251,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         // around them, so they stand out against the room's own light
         if kind == 13 || kind == 14 {
             template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), 7.0, lumens, 0.6));
+        }
+        if kind == 10 || kind == 11 {
+            template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), 4.0, lumens * 0.6, 0.4));
         }
     }
 
@@ -523,13 +528,15 @@ public func RNLightColour(i: Int32) -> Color {
 }
 
 // --- markers -------------------------------------------------------------------------
-// kind 10 data, 11 paydata, 12 data already taken (a hologram of numbers),
+// kind 10 data and 12 data already taken (hologram screens), 11 paydata (a red
+// hologram of numbers),
 // 13 way down and 14 way up (a hologram light beam: green down, white up), 15 jack-out node
 // (holographic pillar), 16 sealed doorway (security gate hologram),
 // 17 device console (Mikoshi access point), 18 network core (Cynosure brain)
 
 public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
-    if kind == 10 || kind == 11 || kind == 12 { return 0; }
+    if kind == 10 || kind == 12 { return 0; }
+    if kind == 11 { return 7; }
     if kind == 13 || kind == 14 { return 2; }
     if kind == 15 { return 3; }
     if kind == 16 { return 4; }
@@ -545,7 +552,8 @@ public func RNMarkerMesh(index: Int32) -> ResRef {
     if index == 4 { return r"base\\environment\\decoration\\electronics\\security\\office_security_gate\\office_security_gate_hologram_a.mesh"; }
     if index == 5 { return r"base\\environment\\decoration\\unique\\quest\\q101_mikoshi_access_point\\q101_mikoshi_access_point_a.mesh"; }
     if index == 6 { return r"ep1\\environment\\quests\\q305_cynosure_core\\q305_brain_hologram.mesh"; }
-    return r"base\\fx\\meshes\\hologram\\awacs_hologram\\fx_awacs_numbers.mesh";
+    if index == 7 { return r"base\\fx\\meshes\\hologram\\awacs_hologram\\fx_awacs_numbers.mesh"; }
+    return r"base\\fx\\environment\\holograms\\screens\\e_hologram_screens.mesh";
 }
 
 // how far above the floor each marker floats
@@ -557,6 +565,7 @@ public func RNMarkerLift(kind: Int32) -> Float {
 
 public func RNMarkerLumens(kind: Int32) -> Float {
     if kind == 12 { return 600.0; }
+    if kind == 10 || kind == 11 { return 8000.0; }
     if kind == 13 || kind == 14 { return 16000.0; }
     if kind == 18 { return 6000.0; }
     if kind == 16 { return 4000.0; }
