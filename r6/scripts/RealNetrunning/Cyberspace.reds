@@ -217,8 +217,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // A mesh scaled evenly (no stretching) so its largest side is `size` metres,
     // standing with its base `lift` metres above the entity's origin.
+    // upright: the mesh lies flat as made, so stand it up (90 degrees about X).
     private func FitUniform(template: ref<EntityBuilderTemplateWrapper>, fit: ref<RNMeshFit>, path: ResRef,
-                            lift: Float, size: Float) {
+                            lift: Float, size: Float, upright: Bool) {
         if !IsDefined(fit) || !fit.ready {
             return;
         }
@@ -231,8 +232,15 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         mesh.meshAppearance = n"default";
         mesh.visualScale = Vector3(s, s, s);
         let place: WorldTransform;
-        WorldTransform.SetPosition(place, Vector4(-cx * s, -cy * s, lift - fit.min.Z * s, 1.0));
-        WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        if upright {
+            // turned 90 degrees about X: the mesh's Y becomes height, its Z faces out
+            let cz = (fit.max.Z + fit.min.Z) / 2.0;
+            WorldTransform.SetPosition(place, Vector4(-cx * s, cz * s, lift - fit.min.Y * s, 1.0));
+            WorldTransform.SetOrientation(place, Quaternion(0.70710677, 0.0, 0.0, 0.70710677));
+        } else {
+            WorldTransform.SetPosition(place, Vector4(-cx * s, -cy * s, lift - fit.min.Z * s, 1.0));
+            WorldTransform.SetOrientation(place, Quaternion(0.0, 0.0, 0.0, 1.0));
+        }
         mesh.localTransform = place;
         mesh.isEnabled = true;
         template.AddComponent(mesh);
@@ -243,7 +251,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private func AddMarker(template: ref<EntityBuilderTemplateWrapper>, kind: Int32, size: Float) {
         let index = RNMarkerMeshIndex(kind);
         if index >= 0 && index < ArraySize(this.m_markerFits) {
-            this.FitUniform(template, this.m_markerFits[index], RNMarkerMesh(index), RNMarkerLift(kind), size);
+            this.FitUniform(template, this.m_markerFits[index], RNMarkerMesh(index), RNMarkerLift(kind), size, index == 0);
         }
         let lumens = RNMarkerLumens(kind) * MaxF(0.3, this.m_lightLevel);
         template.AddComponent(this.MakeColouredLight(RNMarkerColour(kind), size + 4.0, lumens, RNMarkerLift(kind) + size * 0.5));
@@ -558,7 +566,8 @@ public func RNMarkerMesh(index: Int32) -> ResRef {
 
 // how far above the floor each marker floats
 public func RNMarkerLift(kind: Int32) -> Float {
-    if kind == 10 || kind == 11 || kind == 12 { return 0.9; }
+    if kind == 10 || kind == 12 { return 0.5; }
+    if kind == 11 { return 0.9; }
     if kind == 18 { return 0.8; }
     return 0.0;
 }
