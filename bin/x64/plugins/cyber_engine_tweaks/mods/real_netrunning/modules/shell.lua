@@ -105,7 +105,10 @@ local function progress(net)
 end
 
 def("status", "status", "Deck, connection, trace and NetWatch heat.", function()
-	out("Deck power: " .. World.deckPower() .. "   NetWatch heat: " .. Network.state.heat .. "/100 (" .. NetWatch.tierName() .. ")")
+	local deck = World.cyberdeck()
+	out("Cyberdeck: " .. (deck and (deck.name .. " (" .. World.qualityName(deck) .. ")") or "none installed") ..
+		"   Deck power: " .. World.deckPower() .. "/6")
+	out("NetWatch heat: " .. Network.state.heat .. "/100 (" .. NetWatch.tierName() .. ")")
 	if NetWatch.lockout > 0 then out("Deck locked out for " .. math.ceil(NetWatch.lockout) .. "s.", "err") end
 	if NetWatch.agent then out("Agent in the network: " .. NetWatch.agent.name .. " (level " .. NetWatch.agent.level .. ")", "err") end
 	if Network.jacked then out("Jacked into: " .. Network.jacked) end
@@ -300,6 +303,14 @@ def("breach", "breach", "Break the ICE on the next locked floor.", function()
 		return
 	end
 	local power = World.deckPower()
+	if power <= 0 then out("You need a cyberdeck installed to break ICE. A ripperdoc can fit one.", "err") return end
+	-- like Much Better Netrunning: the deck's tier caps what it can touch
+	if f.ice > power + 1 then
+		local need = math.min(6, f.ice - 1)
+		out(string.format("ICE %d is beyond your deck (tier %d, %s). You need a %s cyberdeck or better, or take the ICE down in cyberspace.",
+			f.ice, power, World.qualityName(World.cyberdeck()), World.tierName(need)), "err")
+		return
+	end
 	local duration = 2 + f.ice
 	startJob("breach", net, index, f, duration, math.max(5, 12 + f.ice * 8 - power * 3))
 	out(string.format("Breaching %s on floor %d with deck power %d... (%ds)", floorLabel(f), index, power, duration),
@@ -330,6 +341,7 @@ def("crack", "crack", "Brute-force the password gate ahead (slow, raises trace).
 	local index, f = Network.nextLock(net.addr)
 	if index == nil or f.kind ~= "password" then out("There's no password gate ahead.") return end
 	local duration = 4 + f.ice
+	if World.deckPower() <= 0 then out("You need a cyberdeck installed to crack a gate.", "err") return end
 	local power = startJob("crack", net, index, f, duration, 20 + f.ice * 6)
 	out(string.format("Cracking the gate on floor %d with deck power %d... (%ds)", index, power, duration), "warn")
 end)
@@ -493,6 +505,9 @@ def("jack", "jack", "Jack into the device you're looking at. Every device is on 
 	local net, extra = DeviceNet.forDevice(device)
 	if net == nil then out("The device didn't answer.", "err") return end
 	Network.jacked, Network.jackedDevice = net.addr, device
+	local wired = DeviceNet.floorFor(net, device)
+	Network.jackedFloor = wired
+	local bypassed = Network.openTo(net.addr, wired)
 	commands.connect.fn({ net.addr })
 	local what, count = DeviceNet.describe(net)
 	if net.kind == "device" then
@@ -501,6 +516,12 @@ def("jack", "jack", "Jack into the device you're looking at. Every device is on 
 	else
 		out("Jacked into " .. net.name .. ": " .. what .. " with " .. count .. (count == 1 and " device" or " devices") ..
 			". Reach its control floor to use 'devices'.")
+	end
+	if wired > 1 then
+		local floors = Network.floors(net)
+		Shell.cwd = "/" .. Network.floorFolder(wired, floors[wired])
+		out("This device is wired into floor " .. wired .. " (" .. floors[wired].kind .. "): " ..
+			(bypassed and ("you're in below the locks. Floors 1-" .. wired .. " are open.") or "you're in there."), "ok")
 	end
 	if net.isolated then
 		out("It's isolated: no link to the Net. The only way in is from here.", "warn")
@@ -547,7 +568,8 @@ def("devices", "devices", "List the devices this network controls.", function()
 	if #list == 0 then out("No devices online.") return end
 	for n, d in ipairs(list) do
 		local actions = World.deviceActionsFor(d.kind)
-		out(string.format("  %2d. %-34s %s", n, d.label, #actions > 0 and table.concat(actions, ", ") or "(no direct controls)"))
+		out(string.format("  %2d. %-34s floor %d  %s", n, d.label, DeviceNet.floorFor(net, d),
+			#actions > 0 and table.concat(actions, ", ") or "(no direct controls)"))
 	end
 	out("Use: device <number> <action>")
 end)

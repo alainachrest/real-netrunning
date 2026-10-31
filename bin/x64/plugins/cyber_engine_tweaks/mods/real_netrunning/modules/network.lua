@@ -146,6 +146,7 @@ Network.labCount = 10
 ---------------------------------------------------------------------------
 
 Network.jacked = nil -- runtime: the network of the device V is jacked into right now
+Network.jackedFloor = nil -- runtime: the floor of that network the device is wired into
 
 local function unclaimed(list)
 	local free = {}
@@ -411,6 +412,19 @@ function Network.unlockNext(addr)
 		return Network.markOwned(addr)
 	end
 	return {}
+end
+
+-- Opens every floor down to index (a device wired in there gives a way in
+-- below the locks above it). Never opens the core. Returns true if it opened anything.
+function Network.openTo(addr, index)
+	local net = Network.nets[addr]
+	if net == nil then return false end
+	local floors = Network.floors(net)
+	index = math.min(index, #floors - 1)
+	if index <= Network.depth(addr) then return false end
+	Network.state.depth[addr] = index
+	emit("network.floor", { addr = addr, floor = index, kind = floors[index].kind, org = net.org, bypass = true })
+	return true
 end
 
 function Network.isFloorOpen(addr, index)

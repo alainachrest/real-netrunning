@@ -21,13 +21,61 @@ end
 ---------------------------------------------------------------------------
 
 -- Deck power 1-6, from V's Intelligence (3-20).
-function World.deckPower()
-	local int = try(function()
+-- Deck power comes from the tier of the cyberdeck V has installed, the way Much
+-- Better Netrunning gates hacking by deck quality:
+--   none 0   Common 1   Uncommon 2   Rare 3   Epic 4   Legendary 5   Legendary+ / ++ 6
+World.qualityNames = { [0] = "Common", "Uncommon", "Rare", "Epic", "Legendary" }
+
+-- The installed cyberdeck: { name, quality (0-4), plus (0-2), tier (1-6) }, or nil if V has none.
+function World.cyberdeck()
+	local deck = try(function()
 		local player = Game.GetPlayer()
-		return Game.GetStatsSystem():GetStatValue(player:GetEntityID(), gamedataStatType.Intelligence)
+		if player == nil then return nil end
+		local equipment = Game.GetScriptableSystemsContainer():Get("EquipmentSystem")
+		local data = equipment:GetPlayerData(player)
+		local itemID = data:GetItemInEquipSlot(gamedataEquipmentArea.SystemReplacementCW, 0)
+		if itemID == nil or not ItemID.IsValid(itemID) then return false end
+		local record = TweakDBInterface.GetItemRecord(itemID:GetTDBID())
+		if record == nil or not record:TagsContains("Cyberdeck") then return false end
+		local name = "Cyberdeck"
+		pcall(function()
+			local text = Game.GetLocalizedTextByKey(record:DisplayName())
+			if text and text ~= "" then name = text end
+		end)
+		local quality, plus = 0, 0
+		pcall(function()
+			local itemData = Game.GetTransactionSystem():GetItemData(player, itemID)
+			local stats = Game.GetStatsSystem()
+			quality = math.floor(stats:GetStatValue(itemData:GetStatsObjectID(), gamedataStatType.Quality) + 0.5)
+			plus = math.floor(stats:GetStatValue(itemData:GetStatsObjectID(), gamedataStatType.IsItemPlus) + 0.5)
+		end)
+		quality = math.max(0, math.min(4, quality))
+		local tier = quality + 1
+		if quality == 4 and plus >= 1 then tier = 6 end
+		return { name = name, quality = quality, plus = plus, tier = tier }
 	end)
-	if type(int) ~= "number" then return 2 end
-	return math.max(1, math.min(6, math.floor(int / 4) + 1))
+	return deck or nil
+end
+
+function World.qualityName(deck)
+	if deck == nil then return "none" end
+	return (World.qualityNames[deck.quality] or "Common") .. string.rep("+", deck.plus or 0)
+end
+
+-- The deck quality a tier stands for.
+function World.tierName(tier)
+	if tier >= 6 then return "Legendary+" end
+	return World.qualityNames[math.max(1, tier) - 1] or "Common"
+end
+
+local cachedDeck, cachedAt = nil, nil
+-- 0 with no cyberdeck installed, 1-6 by its tier. Checked at most once a second.
+function World.deckPower()
+	local now = os.clock()
+	if cachedAt == nil or now - cachedAt > 1 then
+		cachedDeck, cachedAt = World.cyberdeck(), now
+	end
+	return cachedDeck and cachedDeck.tier or 0
 end
 
 function World.giveMoney(amount)

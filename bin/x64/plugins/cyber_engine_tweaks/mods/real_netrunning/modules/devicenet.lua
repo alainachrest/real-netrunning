@@ -200,6 +200,20 @@ function DeviceNet.nearby()
 	return order, #devices
 end
 
+-- The floor of its network a device is wired into. Most devices sit on the
+-- lobby, but some are wired in deeper, down to the control floor: jacking into
+-- one of those gets V straight to that floor, past the locks above it.
+function DeviceNet.floorFor(net, device)
+	if net == nil or device == nil or net.kind == "device" or device.kind == "access" or device.kind == "security" then return 1 end
+	local floors = Network.floors(net)
+	local deepest = 1
+	for i, f in ipairs(floors) do if f.kind == "control" then deepest = i end end
+	if deepest <= 1 then return 1 end
+	local rng = Rng.new(seed(), "wired", net.addr, device.hash)
+	if rng:chance(0.55) then return 1 end
+	return rng:int(2, deepest)
+end
+
 -- Short description for the deck.
 function DeviceNet.describe(net)
 	local n = net.devices and #net.devices or 1

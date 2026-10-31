@@ -60,7 +60,7 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 | `fight` | Fight a NetWatch agent that has entered your network |
 | `scrub` | Wipe your traces from a network you have root on, lowering heat (once per network) |
 | `netwatch` | Threat level, heat and agents derezzed. `netwatch world off` stops attacks on V outside the Net |
-| `status` | Deck power, trace, NetWatch heat and threat level |
+| `status` | Your cyberdeck and its tier, deck power, trace, NetWatch heat and threat level |
 | `jackin`, `jackout`, `cyber` | Enter the network you're connected to in cyberspace, leave it, or see where you are. `cyber scan` maps the rooms around you |
 | `news` | Recent events across Night City's nets |
 | `disconnect`, `clear` | Drop the connection, clear the screen |
@@ -68,7 +68,8 @@ Every in-game computer gets a **DESKTOP** button in the bottom-right of its scre
 - Every network is a stack of floors, as in Cyberpunk Red: a lobby, then ICE, password gates, file vaults, a control floor on access point networks, and a core. Breaching the core gives root. Gangs run shallow networks; corporate headquarters run deep ones with Black ICE, which hits back when a breach fails.
 - Start with `scan` and `connect nc.subnet.public`. Breaching networks reveals new routes, from gang relays to corporate branches, backbones and eventually headquarters around the world and in orbit.
 - Progress through each network's floors is saved, so you can come back and carry on.
-- Deck power comes from V's Intelligence. Higher ICE needs a stronger deck.
+- Deck power comes from the tier of the cyberdeck V has installed, as in Much Better Netrunning: Common 1, Uncommon 2, Rare 3, Epic 4, Legendary 5, Legendary+ and ++ 6. Without a cyberdeck you can't `breach` or `crack` at all.
+- A deck can only `breach` ICE up to one level above its own power (a Common deck handles ICE 2, Epic handles ICE 5), and a stronger deck breaks ICE faster and more reliably. ICE beyond your deck can still be fought in person in cyberspace. `status` shows your deck and its tier.
 - Trace fills while you breach. At 100% NetWatch severs the connection and your heat rises. Black ICE on the hardest targets hits back.
 - Progress is saved per save slot.
 
@@ -126,6 +127,7 @@ Every electronic device in Night City is on a network: doors, cameras, turrets, 
 - **Local meshes**: other devices share a mesh with their neighbours, one per city block (and per few storeys of a building). It might be a storefront network, a building LAN, a security mesh or a street utility grid, depending on what's in it.
 - **Loners**: some devices are on a network of their own. Vending machines, arcade cabinets and old computers often are.
 - **Online or isolated**: some networks are linked to the Net, so once you've found one you can `connect` to it from anywhere. Others are isolated, with no link out at all, and the only way in is to stand there and jack into one of their devices.
+- **Devices wired in deeper**: most devices sit on their network's lobby, but some are wired into a lower floor, down to the control floor. Jack into one of those and you're in on that floor, with it and every floor above it open, past the locks you'd otherwise have to breach. The deck starts there, and so does cyberspace. `devices` shows which floor each device is on.
 - A device is always on the same network, decided by your save. Networks you've found are kept in your save, and their device lists grow as you find more of their devices. Each one's control floor lets you control its devices (`devices`, `device <n> <action>`): doors open, close, lock and unlock, and everything else switches on and off.
 
 ## Closed networks

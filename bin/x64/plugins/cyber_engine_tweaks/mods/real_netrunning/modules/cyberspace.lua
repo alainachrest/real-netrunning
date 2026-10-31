@@ -477,7 +477,7 @@ local function build()
 			break
 		end
 	end
-	Cyber.ensureFloors(1)
+	Cyber.ensureFloors(Cyber.startFloor or 1)
 end
 
 local function clear()
@@ -531,7 +531,12 @@ function Cyber.jackIn()
 
 	Cyber.active, Cyber.phase, Cyber.enterTimer = true, "entering", 1.5
 	Cyber.target, Cyber.arrived, Cyber.moveTimer, Cyber.toldToStepAway, Cyber.pendingMove = nil, false, 0, false, nil
-	Cyber.addr, Cyber.body, Cyber.floor = addr, body, 1
+	-- jacked in through a device wired into a deeper floor: start there
+	local start = 1
+	if Network.jacked == addr and (Network.jackedFloor or 1) > 1 and Network.isFloorOpen(addr, Network.jackedFloor) then
+		start = math.min(Network.jackedFloor, #Network.floors(net))
+	end
+	Cyber.addr, Cyber.body, Cyber.floor, Cyber.startFloor = addr, body, start, start
 	Cyber.bodySafe = addr:sub(1, 5) == "home."
 	Cyber.danger, Cyber.dangerTimer, Cyber.falls, Cyber.prompt = nil, 0, {}, nil
 	Cyber.hunters, Cyber.encounterTimer, Cyber.deepWarned, Cyber.agentFought = {}, 0, 0, false
@@ -1286,7 +1291,7 @@ function Cyber.update(dt)
 		Cyber.enterTimer = Cyber.enterTimer - dt
 		if Cyber.enterTimer <= 0 then
 			Cyber.phase = "moving"
-			moveToFloor(1, false)
+			moveToFloor(Cyber.startFloor or 1, false)
 		end
 		return
 	end
