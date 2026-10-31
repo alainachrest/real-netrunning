@@ -30,7 +30,7 @@ local Core = require("modules/core")
 local Territory = require("modules/territory")
 
 local RealNetrunning = {
-	version = "0.1.0",
+	version = "0.2.0",
 	ready = false,
 	overlayOpen = false,
 }
