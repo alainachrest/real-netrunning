@@ -4,8 +4,9 @@
 //
 // The deck's logic (commands, networks, trace) lives in the CET Lua mod.
 // This file only draws it in the game's own UI, using Codeware's InGamePopup
-// (pauses V's controls and slows time like the game's own popups) and
-// TextInput (native typing).
+// (takes V's controls like the game's own popups) and
+// TextInput (native typing). Time keeps running while the deck is open:
+// the popup's usual slow-motion is switched off below.
 //
 // Lua talks to DeckService through the ScriptableServiceContainer:
 //   AddLine / ClearLines / SetPrompt / SetStatus / SetTrace  (Lua -> screen)
@@ -674,6 +675,10 @@ public class DeckPopup extends InGamePopup {
         text.SetText("");
         return text;
     }
+
+    // The game keeps running while the deck is open (no slow-motion)
+    protected func SetTimeDilation() {}
+    protected func ResetTimeDilation() {}
 
     protected cb func OnShown() {
         super.OnShown();

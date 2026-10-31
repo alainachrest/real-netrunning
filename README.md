@@ -19,7 +19,7 @@ Copy the `bin` and `r6` folders into your Cyberpunk 2077 folder.
 
 ## Playing
 
-Bind **Open cyberdeck** in CET's Hotkeys tab, then press it in game. The deck opens in the game's own UI: time slows, V's controls pause, and you type straight into it. Press the hotkey again or Esc to close it.
+Bind **Open cyberdeck** in CET's Hotkeys tab, then press it in game. The deck opens in the game's own UI: the world keeps moving, V's controls pause while it's open, and you type straight into it. Press the hotkey again or Esc to close it.
 
 - Enter runs a command, Up and Down step through past commands, Page Up and Page Down scroll the output.
 - If the native deck can't load (no Codeware, or the `r6` folder is missing), the hotkey falls back to the deck in the CET overlay.
