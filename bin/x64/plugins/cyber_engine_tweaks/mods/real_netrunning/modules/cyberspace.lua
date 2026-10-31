@@ -1188,25 +1188,31 @@ local function rollEncounter(dt)
 	Cyber.encounterTimer = (Cyber.encounterTimer or 0) + dt
 	if Cyber.encounterTimer < Kit.encounterEvery then return end
 	Cyber.encounterTimer = 0
-	if Cyber.bodySafe then return end -- your own machine at home
+	local function last(text) Cyber.lastEncounter = text end
+	if Cyber.bodySafe then return last("none: you're at home") end -- your own machine at home
 	local here = Network.get(Cyber.addr)
 	-- no other netrunner can get into a network with no link to the Net
 	local cutOff = here and (here.isolated or here.closed)
-	if activeCount({ rival = true, rogue = true }) >= Kit.encounterMax then return end
+	if activeCount({ rival = true, rogue = true }) >= Kit.encounterMax then return last("none: already " .. Kit.encounterMax .. " here") end
 	local net = Network.get(Cyber.addr)
 	local tier = net and net.tier or 1
 	local floor = Cyber.floors[Cyber.floor]
-	if floor == nil or floor.layout == nil then return end
+	if floor == nil or floor.layout == nil then return last("none: floor not built") end
 	local r = roll()
 	local rogueChance = 0.03 + 0.02 * tier + (Cyber.floor >= Kit.deepFloor and 0.03 or 0)
 	local rivalChance = 0.12 + 0.03 * tier
 	local kind
-	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance and not cutOff then kind = "rival" else return end
+	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance and not cutOff then kind = "rival"
+	else
+		return last(string.format("nothing (rolled %.2f; rival under %.2f%s, rogue AI under %.2f)", r, rogueChance + rivalChance,
+			cutOff and " but this network is cut off" or "", rogueChance))
+	end
 	local list = kind == "rogue" and Kit.rogueAI or Kit.rivals
 	local names = hunterNames[kind]
 	local name = names[math.floor(roll() * #names) + 1] or names[1]
 	local h = addHunter(kind, list[math.floor(roll() * #list) + 1] or list[1], Cyber.floor, farRoom(Cyber.floor, 3, false), { name = name })
-	if h == nil then return end
+	if h == nil then return last(kind .. " failed to spawn (" .. tostring(World.lastError) .. ")") end
+	last(kind .. " spawned")
 	if kind == "rogue" then
 		say("Something else is in here with you: " .. name .. ". It knows where you are.", "err")
 		World.warn("Rogue AI in the network")
@@ -1705,6 +1711,13 @@ function Cyber.debug()
 	table.insert(lines, "colliders added by redscript: " .. tostring(World.collidersAdded()) ..
 		", floor mesh size: " .. tostring(World.cyberCall("FloorMeshSize")) ..
 		", marker meshes loaded: " .. tostring((World.cyberCall("MarkersLoaded"))) .. "/8")
+	table.insert(lines, string.format("encounters: next roll in %ds, last: %s", math.max(0, math.floor(Kit.encounterEvery - (Cyber.encounterTimer or 0))),
+		tostring(Cyber.lastEncounter or "none yet")))
+	local hl = {}
+	for _, h in ipairs(Cyber.hunters or {}) do
+		table.insert(hl, h.kind .. (h.follow and " (following)" or "") .. " floor " .. tostring(h.floor) .. (h.mode == "hunt" and " hunting" or ""))
+	end
+	table.insert(lines, "hunters: " .. (#hl > 0 and table.concat(hl, ", ") or "none"))
 	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", added " .. tostring(World.particlesAdded) ..
 		(World.particleError and (", error: " .. World.particleError) or ""))
 	table.insert(lines, "V's effects: " .. tostring(World.playerEffects()))
