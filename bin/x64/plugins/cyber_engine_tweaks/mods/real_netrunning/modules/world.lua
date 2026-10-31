@@ -112,6 +112,16 @@ function World.applyStatusEffect(effect)
 	end)
 end
 
+-- The item type name of an item ("Wea_Fists", "Wea_Pistol", ...), or nil.
+local function itemTypeName(itemID)
+	local record = TweakDBInterface.GetItemRecord(itemID:GetTDBID())
+	if record == nil then return nil end
+	local kind = record:ItemType():Type()
+	local ok, name = pcall(function() return EnumValueToString("gamedataItemType", EnumInt(kind)) end)
+	if ok and type(name) == "string" and name ~= "" then return name end
+	return tostring(kind):match("([%w_]+)%s*%(") or tostring(kind)
+end
+
 -- The item type of the weapon in V's hands ("Wea_Fists", "Wea_Pistol", ...), or nil when empty-handed.
 function World.weaponInHand()
 	return try(function()
@@ -119,12 +129,7 @@ function World.weaponInHand()
 		if player == nil then return nil end
 		local item = Game.GetTransactionSystem():GetItemInSlot(player, TweakDBID.new("AttachmentSlots.WeaponRight"))
 		if item == nil then return nil end
-		local record = TweakDBInterface.GetItemRecord(item:GetItemID():GetTDBID())
-		if record == nil then return "unknown" end
-		local kind = record:ItemType():Type()
-		local ok, name = pcall(function() return EnumValueToString("gamedataItemType", EnumInt(kind)) end)
-		if ok and type(name) == "string" and name ~= "" then return name end
-		return tostring(kind):match("([%w_]+)%s*%(") or tostring(kind)
+		return itemTypeName(item:GetItemID()) or "unknown"
 	end)
 end
 
@@ -284,9 +289,17 @@ function World.makeHostile(id)
 	end) == true
 end
 
--- Takes every weapon off a spawned NPC, so it fights with quickhacks only.
+-- Takes every weapon off a spawned NPC except the item types in `keep` (e.g.
+-- fists), so it fights with quickhacks and bare hands like V.
 -- Returns how many weapons were removed (0 once it's unarmed), or nil if it isn't there yet.
-function World.disarm(id)
+function World.disarm(id, keep)
+	local function kept(itemID)
+		if keep == nil then return false end
+		local ok, name = pcall(itemTypeName, itemID)
+		if not ok or name == nil then return false end
+		for _, k in ipairs(keep) do if k == name then return true end end
+		return false
+	end
 	return try(function()
 		local npc = Game.FindEntityByID(id)
 		if npc == nil then return nil end
@@ -298,14 +311,14 @@ function World.disarm(id)
 		for _, slot in ipairs({ "AttachmentSlots.WeaponRight", "AttachmentSlots.WeaponLeft" }) do
 			pcall(function()
 				local item = ts:GetItemInSlot(npc, TweakDBID.new(slot))
-				if item then
+				if item and not kept(item:GetItemID()) then
 					ts:RemoveItem(npc, item:GetItemID(), 1)
 					removed = removed + 1
 				end
 			end)
 		end
 		for _, data in ipairs(items) do
-			if data:HasTag("Weapon") then
+			if data:HasTag("Weapon") and not kept(data:GetID()) then
 				ts:RemoveItem(npc, data:GetID(), data:GetQuantity())
 				removed = removed + 1
 			end

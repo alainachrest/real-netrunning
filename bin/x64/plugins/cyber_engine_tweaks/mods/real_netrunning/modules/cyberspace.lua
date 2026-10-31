@@ -786,10 +786,10 @@ local function updateIce(dt)
 		if dead == false then
 			alive = alive + 1
 			if not floor.iceHostile[k] then floor.iceHostile[k] = World.makeHostile(id) end
-			-- ICE fights with quickhacks, like V: no guns. Checked every tick for
+			-- ICE fights like V: quickhacks and bare hands, no guns or blades. Checked every tick for
 			-- as long as it lives: NPCs draw a fresh weapon from their loadout
 			-- once a fight starts.
-			World.disarm(id)
+			World.disarm(id, Kit.allowedWeapons)
 		elseif dead == nil then
 			alive = alive + 1 -- still spawning
 		end
@@ -1019,7 +1019,7 @@ local function updateHunter(h, dt, here)
 		return
 	end
 	if not h.hostile then h.hostile = World.makeHostile(h.id) end
-	World.disarm(h.id) -- every tick: NPCs re-arm from their loadout in a fight
+	World.disarm(h.id, Kit.allowedWeapons) -- every tick: NPCs re-arm from their loadout in a fight
 	if h.floor ~= Cyber.floor then return end
 	local floor = Cyber.floors[h.floor]
 	local L = floor and floor.layout
