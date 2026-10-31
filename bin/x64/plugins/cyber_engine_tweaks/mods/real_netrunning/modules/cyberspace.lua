@@ -1770,7 +1770,8 @@ function Cyber.debug()
 		local floor = Cyber.floors[Cyber.floor]
 		local here = pos and roomAt(Cyber.floor, pos.x, pos.y)
 		local id = floor and floor.particleIds and here and floor.particleIds[here[1] .. "," .. here[2]]
-		local name = id and World.particleFor[tostring(id.hash)]
+		local name
+		if id then pcall(function() name = World.particleFor[tostring(id.hash)] end) end
 		table.insert(lines, "particles in this room: " .. tostring(name or "none"))
 	end
 	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", blocks seen " .. tostring(World.particleSeen) ..
