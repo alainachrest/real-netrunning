@@ -749,13 +749,10 @@ local function updateIce(dt)
 		if dead == false then
 			alive = alive + 1
 			if not floor.iceHostile[k] then floor.iceHostile[k] = World.makeHostile(id) end
-			-- ICE fights with quickhacks, like V: no guns. Checked a few times in
-			-- case the game hands the weapon back while it spawns in.
-			floor.iceDisarmed = floor.iceDisarmed or {}
-			if (floor.iceDisarmed[k] or 0) < 6 then
-				World.disarm(id)
-				floor.iceDisarmed[k] = (floor.iceDisarmed[k] or 0) + 1
-			end
+			-- ICE fights with quickhacks, like V: no guns. Checked every tick for
+			-- as long as it lives: NPCs draw a fresh weapon from their loadout
+			-- once a fight starts.
+			World.disarm(id)
 		elseif dead == nil then
 			alive = alive + 1 -- still spawning
 		end
@@ -985,10 +982,7 @@ local function updateHunter(h, dt, here)
 		return
 	end
 	if not h.hostile then h.hostile = World.makeHostile(h.id) end
-	if (h.disarmed or 0) < 6 then
-		World.disarm(h.id)
-		h.disarmed = (h.disarmed or 0) + 1
-	end
+	World.disarm(h.id) -- every tick: NPCs re-arm from their loadout in a fight
 	if h.floor ~= Cyber.floor then return end
 	local floor = Cyber.floors[h.floor]
 	local L = floor and floor.layout
@@ -1064,6 +1058,9 @@ local function rollEncounter(dt)
 	if Cyber.encounterTimer < Kit.encounterEvery then return end
 	Cyber.encounterTimer = 0
 	if Cyber.bodySafe then return end -- your own machine at home
+	local here = Network.get(Cyber.addr)
+	-- no other netrunner can get into a network with no link to the Net
+	local cutOff = here and (here.isolated or here.closed)
 	if activeCount({ rival = true, rogue = true }) >= Kit.encounterMax then return end
 	local net = Network.get(Cyber.addr)
 	local tier = net and net.tier or 1
@@ -1073,7 +1070,7 @@ local function rollEncounter(dt)
 	local rogueChance = 0.03 + 0.02 * tier + (Cyber.floor >= Kit.deepFloor and 0.03 or 0)
 	local rivalChance = 0.12 + 0.03 * tier
 	local kind
-	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance then kind = "rival" else return end
+	if r < rogueChance then kind = "rogue" elseif r < rogueChance + rivalChance and not cutOff then kind = "rival" else return end
 	local list = kind == "rogue" and Kit.rogueAI or Kit.rivals
 	local names = hunterNames[kind]
 	local name = names[math.floor(roll() * #names) + 1] or names[1]

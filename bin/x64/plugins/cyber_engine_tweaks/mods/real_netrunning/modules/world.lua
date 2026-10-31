@@ -278,6 +278,16 @@ function World.disarm(id)
 		local ok, items = ts:GetItemList(npc)
 		if not ok or items == nil then return nil end
 		local removed = 0
+		-- whatever is already in its hands first
+		for _, slot in ipairs({ "AttachmentSlots.WeaponRight", "AttachmentSlots.WeaponLeft" }) do
+			pcall(function()
+				local item = ts:GetItemInSlot(npc, TweakDBID.new(slot))
+				if item then
+					ts:RemoveItem(npc, item:GetItemID(), 1)
+					removed = removed + 1
+				end
+			end)
+		end
 		for _, data in ipairs(items) do
 			if data:HasTag("Weapon") then
 				ts:RemoveItem(npc, data:GetID(), data:GetQuantity())
