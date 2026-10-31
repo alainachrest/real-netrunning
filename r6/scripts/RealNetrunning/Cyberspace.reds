@@ -518,8 +518,10 @@ public func RNLightColour(i: Int32) -> Color {
 }
 
 // --- markers -------------------------------------------------------------------------
-// kind 10 data, 11 paydata, 12 data already taken, 13 way down, 14 way up,
-// 15 jack-out node, 16 sealed doorway, 17 device console, 18 network core
+// kind 10 data, 11 paydata, 12 data already taken (a hologram of numbers),
+// 13 way down (Mikoshi portal), 14 way up (light beam), 15 jack-out node
+// (holographic pillar), 16 sealed doorway (security gate hologram),
+// 17 device console (Mikoshi access point), 18 network core (Cynosure brain)
 
 public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
     if kind == 10 || kind == 11 || kind == 12 { return 0; }
@@ -535,17 +537,16 @@ public func RNMarkerMeshIndex(kind: Int32) -> Int32 {
 public func RNMarkerMesh(index: Int32) -> ResRef {
     if index == 1 { return r"base\\environment\\quests\\q116_mikoshi_cyberspace\\mikoshi_cs_portal_frontier_a.mesh"; }
     if index == 2 { return r"base\\environment\\decoration\\advertising\\holograms\\hologram_light_beam.mesh"; }
-    if index == 3 { return r"base\\environment\\decoration\\advertising\\holograms\\common\\common_holograms_a_exit.mesh"; }
+    if index == 3 { return r"ep1\\fx\\quest\\q303\\paradise_hotel\\holograms\\holographic_pillar.mesh"; }
     if index == 4 { return r"base\\environment\\decoration\\electronics\\security\\office_security_gate\\office_security_gate_hologram_a.mesh"; }
     if index == 5 { return r"base\\environment\\decoration\\unique\\quest\\q101_mikoshi_access_point\\q101_mikoshi_access_point_a.mesh"; }
     if index == 6 { return r"ep1\\environment\\quests\\q305_cynosure_core\\q305_brain_hologram.mesh"; }
-    return r"base\\gameplay\\devices\\custom\\hologram_holosphere_displayed_mesh.mesh";
+    return r"base\\fx\\meshes\\hologram\\awacs_hologram\\fx_awacs_numbers.mesh";
 }
 
 // how far above the floor each marker floats
 public func RNMarkerLift(kind: Int32) -> Float {
     if kind == 10 || kind == 11 || kind == 12 { return 0.9; }
-    if kind == 15 { return 1.6; }
     if kind == 18 { return 0.8; }
     return 0.0;
 }
