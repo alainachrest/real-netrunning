@@ -28,7 +28,8 @@ function Network.newState()
 		homeFiles = {}, -- documents saved to V's home computers: { name, text }
 		market = nil,   -- created by modules/market on first use
 		gateways = {},  -- closed network addr -> the access point network that bridges to it
-		banks = {},      -- "addr:path" -> { strikes, drained, frozen } for bank account files
+		banks = {},      -- "addr:bank:holder" -> { strikes, drainedAt, frozenAt, pinGen } for bank accounts
+		clock = 0,       -- seconds of play (paused time doesn't count): what changes over time runs on it
 		deviceNets = {}, -- device networks V has found: addr -> { name, kind, ice, isolated, devices }
 	}
 end
@@ -539,16 +540,20 @@ local NO_BANK_TONES = { device = true, vending = true, transit = true }
 
 -- Clutter, home folders and bank accounts (modules/junk), from their own random
 -- stream so the rest of a network's files stay exactly as they were.
-local function addClutter(net, root, floors, users, org)
+local function addClutter(net, root, floors, users, org, gen)
 	if net.kind == "site" then return end
 	local home = net.kind == "computer" and net.addr:find("^home%.") ~= nil -- V's own computers
-	local rng = Rng.new(Network.state.seed or 0, "clutter", net.addr)
+	local rng = gen > 0 and Rng.new(Network.state.seed or 0, "clutter", net.addr, "gen", gen)
+		or Rng.new(Network.state.seed or 0, "clutter", net.addr)
 	-- a computer belongs to whoever sits at it, not to the device network around it
 	local tone = net.tone or (net.kind == "computer" and "residential") or org.tone
 	local ctx = {
 		name = net.name, org = org, tone = tone, tier = net.tier, users = users,
 		bank = not home and not NO_BANK_TONES[tone] and net.kind ~= "ap" and net.kind ~= "system"
 			and net.kind ~= "mesh" and net.kind ~= "device",
+		-- a person's bank account stays the same whatever else changes on the network
+		bankRng = function(user) return Rng.new(Network.state.seed or 0, "bank", net.addr, user) end,
+		pinFor = function(b) return Network.bankPin(net, b) end,
 	}
 	local homesDone = false
 	for i, f in ipairs(floors) do
@@ -574,16 +579,19 @@ local function addClutter(net, root, floors, users, org)
 	end
 end
 
-local function buildFs(net)
+local function buildFs(net, gen)
 	local org = Lore.getOrg(net.org)
 	local rng = Rng.new(Network.state.seed or 0, "fs", net.addr)
 	local root = newDir()
 	local floors = Network.floors(net)
 
+	-- the same people use a network whatever else changes on it
 	local users = {}
 	for _, u in ipairs(net.users or (net.kind == "computer" and computerUsers(net)) or org.users) do
 		if rng:chance(0.7) or #users == 0 then table.insert(users, u) end
 	end
+	-- after the first generation, mail, logs and paydata come from a new stream
+	if gen > 0 then rng = Rng.new(Network.state.seed or 0, "fs", net.addr, "gen", gen) end
 
 	-- password hints go into the files floor just before each gate, if there is one
 	local hints = {}
@@ -669,13 +677,107 @@ local function buildFs(net)
 		end
 	end
 
-	addClutter(net, root, floors, users, org)
+	addClutter(net, root, floors, users, org, gen)
 	return root
 end
 
+---------------------------------------------------------------------------
+-- Change over time: every network's data (mail, logs, paydata, clutter) is
+-- replaced every few hours of play, each network on its own schedule; people's
+-- bank accounts stay, and refill after they're emptied.
+---------------------------------------------------------------------------
+
+Network.dataPeriod = 4 * 3600  -- seconds of play between a network's data changing
+Network.bankRefill = 2 * 3600  -- an emptied account is full again after this
+Network.bankFreeze = 2 * 3600  -- a frozen account reopens (with a new PIN) after this
+
+function Network.clock() return Network.state and Network.state.clock or 0 end
+
+function Network.tick(dt)
+	if Network.state then Network.state.clock = (Network.state.clock or 0) + dt end
+end
+
+-- Which generation of data a network is on (0 for the first).
+function Network.dataGen(net)
+	if net.kind == "site" or (net.kind == "computer" and net.addr:find("^home%.")) then return 0 end
+	local offset = Rng.hash(net.addr) % Network.dataPeriod
+	return math.floor((Network.clock() + offset) / Network.dataPeriod)
+end
+
+-- Seconds of play until a network's data next changes.
+function Network.dataChangesIn(net)
+	local offset = Rng.hash(net.addr) % Network.dataPeriod
+	return Network.dataPeriod - ((Network.clock() + offset) % Network.dataPeriod)
+end
+
 function Network.fs(net)
-	if net.fs == nil then net.fs = buildFs(net) end
+	local gen = Network.dataGen(net)
+	if net.fs == nil or net.fsGen ~= gen then
+		net.fs, net.fsGen = buildFs(net, gen), gen
+	end
 	return net.fs
+end
+
+-- Bank accounts ------------------------------------------------------------
+
+function Network.bankKey(net, b) return net.addr .. ":bank:" .. b.holder end
+
+local function bankState(net, b)
+	Network.state.banks = Network.state.banks or {}
+	local key = Network.bankKey(net, b)
+	local st = Network.state.banks[key]
+	if st == nil then st = { strikes = 0 } Network.state.banks[key] = st end
+	local now = Network.clock()
+	-- a frozen account reopens after a while, with a new PIN
+	if st.frozenAt and now - st.frozenAt >= Network.bankFreeze then
+		st.frozenAt, st.strikes, st.pinGen = nil, 0, (st.pinGen or 0) + 1
+	end
+	if st.drainedAt and now - st.drainedAt >= Network.bankRefill then st.drainedAt = nil end
+	return st
+end
+
+function Network.bankPin(net, b)
+	local st = bankState(net, b)
+	if (st.pinGen or 0) == 0 then return b.pin end
+	return string.format("%04d", Rng.new(Network.state.seed or 0, "pin", Network.bankKey(net, b), st.pinGen):int(0, 9999))
+end
+
+-- { available, frozen, refillIn, strikes }
+function Network.bankStatus(net, b)
+	local st = bankState(net, b)
+	local now = Network.clock()
+	local available = b.balance
+	local refillIn = 0
+	if st.drainedAt then
+		available = math.floor(b.balance * (now - st.drainedAt) / Network.bankRefill)
+		refillIn = Network.bankRefill - (now - st.drainedAt)
+	end
+	return {
+		available = available, refillIn = refillIn, strikes = st.strikes or 0,
+		frozen = st.frozenAt ~= nil, reopensIn = st.frozenAt and (Network.bankFreeze - (now - st.frozenAt)) or 0,
+	}
+end
+
+-- Empties an account. Returns how much came out.
+function Network.bankDrain(net, b)
+	local st = bankState(net, b)
+	local amount = Network.bankStatus(net, b).available
+	st.drainedAt = Network.clock()
+	return amount
+end
+
+-- A wrong PIN or failed crack. Returns strikes so far and whether it froze.
+function Network.bankStrike(net, b)
+	local st = bankState(net, b)
+	st.strikes = (st.strikes or 0) + 1
+	if st.strikes >= 3 then st.frozenAt = Network.clock() end
+	return st.strikes, st.frozenAt ~= nil
+end
+
+-- What a file says right now (bank accounts show their live balance).
+function Network.fileText(net, node)
+	if node.bank then return Junk.bankText(node.bank, Network.bankStatus(net, node.bank)) end
+	return node.text or ""
 end
 
 -- Which floor a path is on (1 for the root itself).

@@ -174,6 +174,7 @@ registerForEvent("onUpdate", function(dt)
 		Native.update(dt)
 		-- nothing moves on while the game is paused (CET keeps updating in menus)
 		if not World.isPaused() then
+			Network.tick(dt)
 			Shell.update(dt)
 			NetWatch.update(dt, Shell.connected)
 			Market.update(dt)

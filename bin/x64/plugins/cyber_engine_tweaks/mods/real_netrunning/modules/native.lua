@@ -160,14 +160,14 @@ local function machineAddr(key)
 end
 
 -- Flattens a network's generated filesystem into (path, text) pairs.
-local function flatten(node, path, out)
+local function flatten(node, path, out, net)
 	if node.dir then
 		local names = {}
 		for name in pairs(node.children) do table.insert(names, name) end
 		table.sort(names)
-		for _, name in ipairs(names) do flatten(node.children[name], path .. "/" .. name, out) end
+		for _, name in ipairs(names) do flatten(node.children[name], path .. "/" .. name, out, net) end
 	else
-		local text = node.text or ""
+		local text = Network.fileText(net, node)
 		if node.paydata then
 			text = text .. "\n\nPaydata worth about " .. node.paydata .. " eddies. Use 'download' in the Terminal to sell it."
 		end
@@ -180,7 +180,7 @@ function Native.pushMachineFiles(key)
 	local net = addr and Network.get(addr)
 	if svc == nil or net == nil then return end
 	local files = {}
-	flatten(Network.fs(net), "", files)
+	flatten(Network.fs(net), "", files, net)
 	call(function()
 		svc:ClearMachineFiles(key)
 		for _, f in ipairs(files) do

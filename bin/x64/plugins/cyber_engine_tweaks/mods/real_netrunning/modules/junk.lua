@@ -271,26 +271,44 @@ function Junk.home(rng, add, ctx, user)
 		mail("monitor", rng:pick(work))
 	end
 
-	-- a bank account, sometimes with its PIN left lying around
-	if person and ctx.bank and rng:chance(ctx.bankChance or 0.55) then
-		local b = rng:pick(Junk.banks)
-		local balance, security = Junk.balance(rng, ctx.tone, ctx.tier)
-		local pin = string.format("%04d", rng:int(0, 9999))
-		local number = string.format("%s-%04d-%04d", b.prefix, rng:int(0, 9999), rng:int(0, 9999))
-		add("home/" .. user .. "/bank/" .. b.slug .. ".acct", {
-			text = b.name .. " - personal account\nHolder: " .. user .. "\nAccount: " .. number ..
-				"\nBalance: " .. eddies(balance) .. " eddies\nAccess: PIN required." ..
-				"\n\nUse 'bank <file> <pin>' if you know the PIN, or 'bank <file>' to brute-force it.",
-			bank = { name = b.name, holder = user, number = number, balance = balance, pin = pin, security = security },
-		})
-		local leak = rng:next()
-		if leak < 0.5 then
-			mail("security@" .. b.slug .. ".nc", "Your " .. b.name .. " PIN has been reset.\nNew PIN: " .. pin ..
-				"\nFor your safety, delete this message after reading.")
-		elseif leak < 0.65 then
-			add("home/" .. user .. "/pins.txt", { text = "bank " .. pin .. "\ndoor 1234\nlocker " .. string.format("%04d", rng:int(0, 9999)) })
+	-- a bank account, sometimes with its PIN left lying around. The account is
+	-- the person's own (ctx.bankRng), so it's the same every time the network's
+	-- data changes; only whether they left the PIN about changes.
+	if person and ctx.bank then
+		local brng = ctx.bankRng and ctx.bankRng(user) or rng
+		if brng:chance(ctx.bankChance or 0.55) then
+			local b = brng:pick(Junk.banks)
+			local balance, security = Junk.balance(brng, ctx.tone, ctx.tier)
+			local pin = string.format("%04d", brng:int(0, 9999))
+			local number = string.format("%s-%04d-%04d", b.prefix, brng:int(0, 9999), brng:int(0, 9999))
+			local account = { name = b.name, holder = user, number = number, balance = balance, pin = pin, security = security }
+			add("home/" .. user .. "/bank/" .. b.slug .. ".acct", { bank = account })
+			local current = ctx.pinFor and ctx.pinFor(account) or pin
+			local leak = rng:next()
+			if leak < 0.5 then
+				mail("security@" .. b.slug .. ".nc", "Your " .. b.name .. " PIN has been reset.\nNew PIN: " .. current ..
+					"\nFor your safety, delete this message after reading.")
+			elseif leak < 0.65 then
+				add("home/" .. user .. "/pins.txt", { text = "bank " .. current .. "\ndoor 1234\nlocker " .. string.format("%04d", rng:int(0, 9999)) })
+			end
 		end
 	end
+end
+
+-- What an account file says, with its balance right now.
+-- status: { available, frozen, refillIn, reopensIn } (Network.bankStatus)
+function Junk.bankText(b, status)
+	local lines = { b.name .. " - personal account", "Holder: " .. b.holder, "Account: " .. b.number,
+		"Balance: " .. eddies(status and status.available or b.balance) .. " eddies" }
+	if status and status.frozen then
+		table.insert(lines, "Status: FROZEN after suspicious activity. Reopens in about " .. math.ceil(status.reopensIn / 60) .. " min, with a new PIN.")
+	elseif status and status.refillIn > 0 then
+		table.insert(lines, "Next payday in about " .. math.ceil(status.refillIn / 60) .. " min.")
+	end
+	table.insert(lines, "Access: PIN required.")
+	table.insert(lines, "")
+	table.insert(lines, "Use 'bank <file> <pin>' if you know the PIN, or 'bank <file>' to brute-force it.")
+	return table.concat(lines, "\n")
 end
 
 return Junk

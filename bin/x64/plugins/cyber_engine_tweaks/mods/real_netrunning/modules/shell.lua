@@ -455,7 +455,7 @@ def("cat", "cat <file>", "Read a file.", function(args)
 	local node, path = Network.resolve(net, Shell.cwd, args[1])
 	if node == nil or node.dir then out("No such file.", "err") return end
 	if not checkFloor(net, path) then return end
-	out(node.text or "")
+	out(Network.fileText(net, node))
 end)
 
 def("download", "download <file>", "Download paydata to sell.", function(args)
@@ -506,38 +506,38 @@ def("leak", "leak <file>", "Leak paydata to the press (crashes the owner's stock
 	addTrace(10)
 end)
 
--- Bank accounts in people's home folders (modules/junk).
-local function bankState(key)
-	Network.state.banks = Network.state.banks or {}
-	local st = Network.state.banks[key]
-	if st == nil then st = { strikes = 0 } Network.state.banks[key] = st end
-	return st
-end
-Shell.bankState = function(key) return Network.state.banks and Network.state.banks[key] end
+-- Bank accounts in people's home folders (modules/junk). They refill after
+-- they're emptied, and a frozen one reopens with a new PIN (modules/network).
+local function mins(seconds) return math.max(1, math.ceil(seconds / 60)) end
 
-local function drainAccount(net, key, b, how)
-	local st = bankState(key)
-	st.drained = true
-	World.giveMoney(b.balance)
-	out("Transferred " .. Junk.eddies(b.balance) .. " eddies out of " .. b.holder .. "'s " .. b.name ..
+local function drainAccount(net, b, how)
+	local amount = Network.bankDrain(net, b)
+	World.giveMoney(amount)
+	out("Transferred " .. Junk.eddies(amount) .. " eddies out of " .. b.holder .. "'s " .. b.name ..
 		" account, through a chain of shell accounts.", "ok")
-	World.notify("Bank transfer: " .. b.balance .. " eddies")
+	World.notify("Bank transfer: " .. amount .. " eddies")
 	Network.addHeat(b.security >= 3 and 3 or 1, "emptied a bank account on " .. net.addr)
-	emit("hack.bank", { addr = net.addr, org = net.org, value = b.balance, bank = b.name, how = how, tier = net.tier })
+	emit("hack.bank", { addr = net.addr, org = net.org, value = amount, bank = b.name, how = how, tier = net.tier })
 	addTrace(5)
 end
 
-local function bankStrike(net, key, b, text)
-	local st = bankState(key)
-	st.strikes = (st.strikes or 0) + 1
-	if st.strikes >= 3 then
-		st.frozen = true
+local function bankStrike(net, b, text)
+	local strikes, frozen = Network.bankStrike(net, b)
+	if frozen then
 		out(text .. " " .. b.name .. " froze the account.", "err")
 		Network.addHeat(2, "tripped a bank's fraud alarm on " .. net.addr)
 	else
-		out(text .. " (" .. (3 - st.strikes) .. " more and the bank freezes the account)", "err")
+		out(text .. " (" .. (3 - strikes) .. " more and the bank freezes the account)", "err")
 	end
 	addTrace(10)
+end
+
+-- nil when the account can't be touched right now (and says why)
+local function bankReady(net, b)
+	local status = Network.bankStatus(net, b)
+	if status.frozen then out(b.name .. " froze this account. It reopens in about " .. mins(status.reopensIn) .. " min.", "err") return false end
+	if status.available < 20 then out("Nothing left in it. Next payday in about " .. mins(status.refillIn) .. " min.") return false end
+	return true
 end
 
 def("bank", "bank <file> [pin]", "Empty a bank account file: with its PIN, or brute-force it with your deck.", function(args)
@@ -548,13 +548,10 @@ def("bank", "bank <file> [pin]", "Empty a bank account file: with its PIN, or br
 	if not checkFloor(net, path) then return end
 	local b = node.bank
 	if b == nil then out("That isn't a bank account.") return end
-	local key = net.addr .. ":" .. path
-	local st = bankState(key)
-	if st.drained then out("Already emptied.") return end
-	if st.frozen then out(b.name .. " froze this account.", "err") return end
+	if not bankReady(net, b) then return end
 	if args[2] then
-		if args[2] == b.pin then drainAccount(net, key, b, "pin")
-		else bankStrike(net, key, b, "Wrong PIN.") end
+		if args[2] == Network.bankPin(net, b) then drainAccount(net, b, "pin")
+		else bankStrike(net, b, "Wrong PIN.") end
 		return
 	end
 	if NetWatch.lockout > 0 then out("Your deck is still rebooting (" .. math.ceil(NetWatch.lockout) .. "s).", "err") return end
@@ -562,7 +559,7 @@ def("bank", "bank <file> [pin]", "Empty a bank account file: with its PIN, or br
 	local power = World.deckPower()
 	if power <= 0 then out("You need a cyberdeck installed to brute-force an account.", "err") return end
 	local duration = 4 + b.security * 2
-	Shell.job = { kind = "bank", addr = net.addr, key = key, path = path, elapsed = 0, duration = duration,
+	Shell.job = { kind = "bank", addr = net.addr, path = path, holder = b.holder, elapsed = 0, duration = duration,
 		power = power, security = b.security, traceTotal = (12 + b.security * 6) * Network.lag(net), traced = 0 }
 	out(string.format("Brute-forcing %s's %s PIN with deck power %d... (%ds)", b.holder, b.name, power, duration), "warn")
 end)
@@ -782,8 +779,6 @@ end
 -- Territory: holding networks against the gangs and corps (modules/territory)
 ---------------------------------------------------------------------------
 
-local function mins(seconds) return math.max(0, math.ceil(seconds / 60)) end
-
 def("holdings", "holdings", "The networks you hold, their defences, and any raids on them.", function()
 	local t = Territory.state()
 	local mine = Territory.playerNetworks()
@@ -896,13 +891,13 @@ end
 local function finishBank(job, net)
 	local node = Network.resolve(net, "/", job.path)
 	local b = node and node.bank
-	if b == nil then return end
-	local st = bankState(job.key)
-	if st.drained or st.frozen then return end
+	if b == nil or b.holder ~= job.holder then return end
+	local status = Network.bankStatus(net, b)
+	if status.frozen or status.available < 20 then return end
 	local chance = math.max(0.15, math.min(0.95, 0.5 + 0.15 * (job.power - job.security)))
 	local roll = Shell.random and Shell.random() or math.random()
-	if roll < chance then drainAccount(net, job.key, b, "brute force")
-	else bankStrike(net, job.key, b, "PIN crack failed. The bank's ICE bounced you.") end
+	if roll < chance then drainAccount(net, b, "brute force")
+	else bankStrike(net, b, "PIN crack failed. The bank's ICE bounced you.") end
 end
 
 local function finishJob(job)

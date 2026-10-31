@@ -352,19 +352,13 @@ local function fileLabel(net, file)
 	local name = file.path:match("([^/]+)$")
 	if file.node.paydata then
 		if Network.state.looted[net.addr .. ":" .. file.path] then return name .. " (already taken)" end
-		if file.node.bank then
-		local st = Network.state.banks and Network.state.banks[net.addr .. ":" .. file.path]
-		if st and st.drained then return name .. " (emptied)" end
-		if st and st.frozen then return name .. " (frozen)" end
-		return name .. " - bank account, " .. file.node.bank.balance .. " eddies"
-	end
-	return name .. " - paydata, ~" .. file.node.paydata .. " eddies"
+		return name .. " - paydata, ~" .. file.node.paydata .. " eddies"
 	end
 	if file.node.bank then
-		local st = Network.state.banks and Network.state.banks[net.addr .. ":" .. file.path]
-		if st and st.drained then return name .. " (emptied)" end
-		if st and st.frozen then return name .. " (frozen)" end
-		return name .. " - bank account, " .. file.node.bank.balance .. " eddies"
+		local status = Network.bankStatus(net, file.node.bank)
+		if status.frozen then return name .. " (frozen)" end
+		if status.available < 20 then return name .. " (emptied)" end
+		return name .. " - bank account, " .. status.available .. " eddies"
 	end
 	return name
 end
