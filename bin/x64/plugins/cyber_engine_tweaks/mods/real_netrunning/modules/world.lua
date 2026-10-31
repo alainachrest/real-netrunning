@@ -241,22 +241,25 @@ function World.spawnNPC(record, x, y, z, yaw)
 	end)
 end
 
--- A copy of an NPC record that comes with no weapons at all: its primary and
--- secondary equipment point at an empty equipment group, so the NPC never has
--- a gun to draw (taking guns away after it spawns doesn't stick: NPCs re-arm
--- from their record in a fight). Its quickhacks and everything else are the
--- original's. Returns the copy's record name, or nil if TweakDB wouldn't do it.
+-- A copy of an NPC record that fights with its fists: its equipment is swapped
+-- for a fist-fighting gang member's, so it never has a gun to draw (taking guns
+-- away after it spawns doesn't stick: NPCs re-arm from their record in a
+-- fight) but still has something to fight with (with no equipment at all they
+-- just stand there). Its quickhacks and everything else are the original's.
+-- Returns the copy's record name, or nil if TweakDB wouldn't do it.
+World.fistsFrom = "Character.tyger_claws_gangster2_melee2_fists_ma"
 local unarmed = {}
 function World.unarmedRecord(record)
 	if unarmed[record] ~= nil then return unarmed[record] or nil end
 	local name = try(function()
+		local fists = TweakDB:GetFlat(World.fistsFrom .. ".primaryEquipment")
 		local empty = "RealNetrunning.NoEquipment"
 		if TweakDB:GetRecord(empty) == nil then
 			TweakDB:CreateRecord(empty, "gamedataNPCEquipmentGroup_Record")
 		end
 		local copy = "RealNetrunning.Unarmed_" .. record:gsub("^Character%.", "")
 		if TweakDB:GetRecord(copy) == nil and not TweakDB:CloneRecord(copy, record) then return nil end
-		TweakDB:SetFlat(copy .. ".primaryEquipment", TweakDBID.new(empty))
+		TweakDB:SetFlat(copy .. ".primaryEquipment", fists or TweakDBID.new(empty))
 		TweakDB:SetFlat(copy .. ".secondaryEquipment", TweakDBID.new(empty))
 		return copy
 	end)
