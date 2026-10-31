@@ -543,6 +543,59 @@ local function clear()
 end
 
 ---------------------------------------------------------------------------
+-- The HUD: meatspace's map and quest tracker don't belong in the Net
+---------------------------------------------------------------------------
+--
+-- Hidden by switching off the game's own HUD settings while jacked in. What
+-- was on is remembered in a small file next to the mod as well as in memory,
+-- so it's put back even if the game closes while V is still in cyberspace.
+
+Cyber.hudFile = "hud_restore.txt"
+
+local function writeHudFile(names)
+	pcall(function()
+		local f = io.open(Cyber.hudFile, "w")
+		if f then f:write(table.concat(names, "\n")) f:close() end
+	end)
+end
+
+local function hideHud()
+	if Cyber.hudHidden then return end
+	local hidden = {}
+	for _, name in ipairs(Kit.hideHud) do
+		if World.hudSetting(name) == true then table.insert(hidden, name) end
+	end
+	Cyber.hudHidden = hidden
+	if #hidden == 0 then return end
+	writeHudFile(hidden)
+	local values = {}
+	for _, name in ipairs(hidden) do values[name] = false end
+	World.setHudSettings(values)
+end
+
+-- Puts back whatever hideHud switched off (this session, or one that ended in cyberspace).
+function Cyber.restoreHud()
+	local names = Cyber.hudHidden
+	if names == nil then
+		names = {}
+		pcall(function()
+			local f = io.open(Cyber.hudFile, "r")
+			if f then
+				for line in f:lines() do if line ~= "" then table.insert(names, line) end end
+				f:close()
+			end
+		end)
+	end
+	Cyber.hudHidden = nil
+	if #names > 0 then
+		local values = {}
+		for _, name in ipairs(names) do values[name] = true end
+		World.setHudSettings(values)
+	end
+	pcall(os.remove, Cyber.hudFile)
+end
+
+---------------------------------------------------------------------------
 -- Jacking in and out
 ---------------------------------------------------------------------------
 
@@ -599,6 +652,7 @@ function Cyber.jackIn()
 
 	for _, effect in ipairs(Kit.restrictions) do World.applyStatusEffect(effect) end
 	World.setJackedIn(true)
+	hideHud()
 	Cyber.closeDeck()
 	Cyber.applyLook()
 	Cyber.tilesAsked, Cyber.propsAsked, World.lastError, Cyber.failedProps = 0, 0, nil, {}
@@ -619,6 +673,7 @@ function Cyber.jackOut(reason, quiet)
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
 	World.removeStatusEffect(Kit.holsterEffect)
 	World.setJackedIn(false)
+	Cyber.restoreHud()
 	local forced = reason ~= nil and reason ~= "user" and reason ~= "cancelled"
 	if forced and reason ~= "broken" and reason ~= "cancelled" then
 		World.applyStatusEffect("BaseStatusEffect.PlayerElectrocuted")
@@ -653,6 +708,8 @@ end
 -- A save loaded while V was in cyberspace: put V back in their body.
 function Cyber.onSessionStart()
 	Cyber.active, Cyber.floors, Cyber.objects, Cyber.props, Cyber.agentNPC, Cyber.hunters = false, {}, {}, {}, nil, {}
+	-- the HUD comes back if the game last closed (or a save loaded) mid-cyberspace
+	Cyber.restoreHud()
 	local s = Network.state and Network.state.cyber
 	if s and s.active and s.body then Cyber.pendingRecover = 2.0 end
 end
@@ -663,6 +720,7 @@ local function recover()
 	for _, effect in ipairs(Kit.restrictions) do World.removeStatusEffect(effect) end
 	World.removeStatusEffect(Kit.holsterEffect)
 	World.setJackedIn(false)
+	Cyber.restoreHud()
 	s.active, s.body, s.addr = false, nil, nil
 	say("You wake up where you jacked in.", "warn")
 end

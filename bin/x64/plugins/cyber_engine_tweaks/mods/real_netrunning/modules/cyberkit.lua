@@ -120,6 +120,10 @@ function Kit.ambience(org, tier)
 	return Kit.templates.ambienceLocal
 end
 
+-- HUD parts hidden while jacked in (the game's Settings > Interface > HUD
+-- options; each one is put back as it was on jack-out).
+Kit.hideHud = { "minimap", "quest_tracker", "input_hints", "activity_log" }
+
 -- Status effects while jacked in: no fast travel.
 Kit.restrictions = { "GameplayRestriction.BlockFastTravel" }
 -- No guns or blades in cyberspace: quickhacks and bare hands only. Weapons of

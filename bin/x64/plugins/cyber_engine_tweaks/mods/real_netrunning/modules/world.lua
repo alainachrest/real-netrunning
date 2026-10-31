@@ -398,6 +398,33 @@ function World.setJackedIn(on)
 	end)
 end
 
+---------------------------------------------------------------------------
+-- The HUD, through the game's own interface settings (Settings > Interface)
+---------------------------------------------------------------------------
+
+-- true/false for a HUD setting such as "minimap", or nil if the game has no such setting.
+function World.hudSetting(name)
+	local value = try(function()
+		local var = Game.GetSettingsSystem():GetVar("/interface/hud", name)
+		if var == nil then return nil end
+		return var:GetValue()
+	end)
+	if type(value) == "boolean" then return value end
+	return nil
+end
+
+function World.setHudSettings(values)
+	return try(function()
+		local settings = Game.GetSettingsSystem()
+		for name, value in pairs(values) do
+			local var = settings:GetVar("/interface/hud", name)
+			if var ~= nil then var:SetValue(value == true) end
+		end
+		settings:ConfirmChanges()
+		return true
+	end)
+end
+
 function World.notify(text)
 	if World.hud then try(function() World.hud.ShowMessage(text) end) end
 end

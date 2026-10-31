@@ -2,3 +2,4 @@
 bin/x64/plugins/cyber_engine_tweaks/mods/real_netrunning/sessions/*
 !bin/x64/plugins/cyber_engine_tweaks/mods/real_netrunning/sessions/.keep
 *.log
+bin/x64/plugins/cyber_engine_tweaks/mods/real_netrunning/hud_restore.txt
