@@ -530,22 +530,25 @@ function World.playerEffects()
 	return result
 end
 
--- Particles in cyberspace rooms: the redscript side builds each particle
--- block (kind 5) and this adds the particle system while it's being built,
--- through Codeware's ResourceHelper (the way World Builder adds particles).
-World.particlesAdded, World.particleError = 0, nil
+-- Particles in cyberspace rooms: each particle block (kind 5) gets a particle
+-- system added as its entity initialises (the redscript side passes every
+-- cyberspace block through RNEntityHooks; this observes it), through Codeware's
+-- ResourceHelper, the way World Builder adds particles.
+World.particlesAdded, World.particleError, World.particleSeen = 0, nil, 0
 function World.watchParticleBlocks(kind, path)
 	return try(function()
-		Observe("RealNetrunning.RNCyberspaceSystem", "OnBlockExtract", function(system, event)
+		Observe("RNEntityHooks", "OnEntityInitialize", function(_, event)
+			World.particleSeen = World.particleSeen + 1
 			local ok, err = pcall(function()
-				local builder = event:GetEntityBuilder()
-				if builder == nil then return end
-				if system:BlockKind(builder:GetEntityID()) ~= kind then return end
+				local entity = event:GetEntity()
+				if entity == nil then return end
+				local system = Game.GetScriptableSystemsContainer():Get("RealNetrunning.RNCyberspaceSystem")
+				if system == nil or system:BlockKind(entity:GetEntityID()) ~= kind then return end
 				local component = entParticlesComponent.new()
 				component.name = "rn_particles"
 				ResourceHelper.LoadReferenceResource(component, "particleSystem", path, true)
 				component.emissionRate = 1.0
-				builder:GetTemplate():AddComponent(component)
+				entity:AddComponent(component)
 				World.particlesAdded = World.particlesAdded + 1
 			end)
 			if not ok then World.particleError = tostring(err) end

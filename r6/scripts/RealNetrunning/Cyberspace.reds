@@ -53,6 +53,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_lightLevel: Float;   // 'cyber light': brightness multiplier
     private let m_lightColour: Int32;  // 'cyber light': colour preset
     private let m_markerFits: array<ref<RNMeshFit>>; // one per marker mesh (see RNMarkerMesh)
+    private let m_hooks: ref<RNEntityHooks>;          // Lua adds particles from here (Hooks.reds)
 
     // the size and kind of each block Lua asked for, looked up when it's built
     private let m_pending: Vector4;  // half x, half y, half z, kind
@@ -83,6 +84,9 @@ public class RNCyberspaceSystem extends ScriptableSystem {
         ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(6), 6, n"OnMarker6Loaded"));
         ArrayPush(this.m_markerFits, this.LoadFit(RNMarkerMesh(7), 7, n"OnMarker7Loaded"));
         GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Extract", this, n"OnBlockExtract")
+            .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
+        this.m_hooks = new RNEntityHooks();
+        GameInstance.GetCallbackSystem().RegisterCallback(n"Entity/Initialize", this.m_hooks, n"OnEntityInitialize")
             .AddTarget(EntityTarget.Template(RNCyberTileTemplate()));
     }
 
@@ -382,7 +386,7 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             return;
         }
         if kind == 5 {
-            // particles: added by the Lua side (it observes this callback)
+            // particles: added by the Lua side when the entity initialises (Hooks.reds)
             return;
         }
 

@@ -1761,7 +1761,8 @@ function Cyber.debug()
 		table.insert(hl, h.kind .. (h.follow and " (following)" or "") .. " floor " .. tostring(h.floor) .. (h.mode == "hunt" and " hunting" or ""))
 	end
 	table.insert(lines, "hunters: " .. (#hl > 0 and table.concat(hl, ", ") or "none"))
-	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", added " .. tostring(World.particlesAdded) ..
+	table.insert(lines, "particles: asked " .. (Cyber.particlesAsked or 0) .. ", blocks seen " .. tostring(World.particleSeen) ..
+		", added " .. tostring(World.particlesAdded) ..
 		(World.particleError and (", error: " .. World.particleError) or ""))
 	table.insert(lines, "V's effects: " .. tostring(World.playerEffects()))
 	local looks = World.cyberCall("MarkerAppearances")
