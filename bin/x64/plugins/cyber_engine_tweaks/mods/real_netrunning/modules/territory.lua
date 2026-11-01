@@ -231,6 +231,12 @@ local function transfer(addr, to, from)
 	t.control[addr] = (to ~= net.org) and to or nil
 	t.since[addr] = t.clock
 	emit("territory.taken", { addr = addr, to = to, from = from })
+	-- a takeover in a district is an incident there: the winner's street influence grows
+	local ci = Core.get()
+	if ci and ci.incidents and net.district and to ~= "player" and from ~= "player" then
+		ci.incidents.report({ kind = "network_takeover", text = Territory.holderName(to) .. " took " .. net.name ..
+			" from " .. Territory.holderName(from), district = net.district, by = to, severity = 1 })
+	end
 	-- the people who work there know about it
 	local cp = Core.get()
 	if cp and cp.people then
