@@ -420,6 +420,162 @@ function Lore.junkNetworks(rng, count)
 end
 
 ---------------------------------------------------------------------------
+-- More of the street: extra single-network businesses, and locations that run
+-- several networks, one for each job (guest wifi, staff, security, payments...).
+-- Generated from their own random stream, after the first set, so saves made
+-- before these were added keep the local networks they already had.
+---------------------------------------------------------------------------
+
+Lore.moreKinds = {
+	{ id = "arcade",   tone = "shop", ice = { 0, 1 }, paydata = { 20, 90 },
+		names = { "%s's arcade, %a", "Pachinko Palace, %a" },
+		tagline = "High scores and higher stakes.", about = "Arcade cabinets, pachinko and a change machine that's always empty." },
+	{ id = "gym",      tone = "shop", ice = { 0, 1 }, paydata = { 20, 90 },
+		names = { "%f's boxing gym, %a", "Iron %s Fitness, %a" },
+		tagline = "No pain, no chrome.", about = "Weights, a ring and a locker room nobody cleans." },
+	{ id = "garage",   tone = "shop", ice = { 0, 1 }, paydata = { 40, 150 },
+		names = { "%s Auto Repair, %a", "%f's chop shop, %a" },
+		tagline = "We fix anything with wheels.", about = "Car and bike repairs. Parts of uncertain origin." },
+	{ id = "tattoo",   tone = "shop", ice = { 0, 1 }, paydata = { 20, 80 },
+		names = { "%f's ink & chrome, %a", "Glow Tattoo, %a" },
+		tagline = "Subdermal LEDs while you wait.", about = "Tattoos, piercings and light-up subdermals." },
+	{ id = "laundry",  tone = "shop", ice = { 0, 0 }, paydata = { 10, 40 },
+		names = { "%a coin laundry", "%s Wash & Dry, %a" },
+		tagline = "Machines take eddies only.", about = "A laundromat with networked machines and a change kiosk." },
+	{ id = "market",   tone = "shop", ice = { 0, 1 }, paydata = { 20, 100 },
+		names = { "%a night market", "%s street market, %a" },
+		tagline = "Everything's negotiable.", about = "Stalls, food carts and a payment mesh that barely holds together." },
+	{ id = "temple",   tone = "residential", ice = { 0, 1 }, paydata = { 10, 60 },
+		names = { "%a community temple", "Church of %s, %a" },
+		tagline = "All are welcome.", about = "A place of worship with a donations terminal and a noticeboard." },
+	{ id = "radio",    tone = "media", ice = { 1, 2 }, paydata = { 60, 200 },
+		names = { "Pirate radio %n.%n FM, %a", "%h's pirate broadcast rig" },
+		tagline = "Broadcasting to whoever's listening.", about = "An unlicensed radio station. The playlist is better than the official ones." },
+	{ id = "billboard", tone = "vending", ice = { 0, 1 }, paydata = { 10, 50 },
+		names = { "Billboard controller, %a", "%a ad screen grid" },
+		tagline = "Your ad here.", about = "The controller for a bank of advertising screens." },
+	{ id = "parking",  tone = "transit", ice = { 0, 1 }, paydata = { 10, 60 },
+		names = { "%a parking garage", "%s Park & Lock, %a" },
+		tagline = "Pay at the machine.", about = "Parking barriers, ticket machines and a camera on every floor." },
+}
+
+-- A location with several networks. Each part: suffix, what it's for, ICE, paydata.
+Lore.siteKinds = {
+	{ id = "hotel", tone = "shop", names = { "Hotel %s, %a", "%a Capsule Hotel", "The %s Motel, %a" },
+		about = "A hotel with a network for everything: guests, staff, security and the front desk till.",
+		parts = {
+			{ suffix = "guest",    label = "guest wifi",          ice = { 0, 0 }, paydata = { 0, 30 } },
+			{ suffix = "staff",    label = "staff network",       ice = { 1, 1 }, paydata = { 40, 140 } },
+			{ suffix = "security", label = "security cameras",    ice = { 1, 2 }, paydata = { 20, 80 } },
+			{ suffix = "pay",      label = "front desk payments", ice = { 2, 2 }, paydata = { 100, 300 } },
+		} },
+	{ id = "club", tone = "bar", names = { "Club %s, %a", "%f's nightclub, %a" },
+		about = "A nightclub: a crowd on the guest net, the lights and sound on another, and the real business out back.",
+		parts = {
+			{ suffix = "guest",    label = "guest wifi",          ice = { 0, 0 }, paydata = { 0, 30 } },
+			{ suffix = "stage",    label = "lighting and sound",  ice = { 0, 1 }, paydata = { 10, 50 } },
+			{ suffix = "security", label = "door and cameras",    ice = { 1, 2 }, paydata = { 20, 80 } },
+			{ suffix = "backroom", label = "back room",           ice = { 2, 3 }, paydata = { 200, 600 } },
+		} },
+	{ id = "mega", tone = "residential", names = { "Megabuilding H%n", "%s Towers, %a" },
+		about = "A megabuilding: thousands of residents, and a separate network for every system that keeps it running.",
+		parts = {
+			{ suffix = "tenants",  label = "tenants' network",    ice = { 0, 0 }, paydata = { 10, 60 } },
+			{ suffix = "maint",    label = "maintenance",         ice = { 1, 1 }, paydata = { 20, 80 } },
+			{ suffix = "lifts",    label = "elevator control",    ice = { 1, 1 }, paydata = { 10, 40 } },
+			{ suffix = "security", label = "building security",   ice = { 1, 2 }, paydata = { 30, 120 } },
+			{ suffix = "rent",     label = "rent office",         ice = { 2, 2 }, paydata = { 80, 250 } },
+		} },
+	{ id = "clinic", tone = "ripper", names = { "%s Medical Center, %a", "%a walk-in clinic" },
+		about = "A clinic that keeps its patient records, its front desk and its equipment on separate networks.",
+		parts = {
+			{ suffix = "desk",     label = "front desk",          ice = { 0, 1 }, paydata = { 20, 80 } },
+			{ suffix = "records",  label = "patient records",     ice = { 2, 3 }, paydata = { 200, 500 } },
+			{ suffix = "equip",    label = "medical equipment",   ice = { 1, 2 }, paydata = { 30, 100 } },
+		} },
+	{ id = "mall", tone = "shop", names = { "%a shopping arcade", "%s Plaza, %a" },
+		about = "A mall: shoppers' wifi, a payments mesh for every store, and security watching all of it.",
+		parts = {
+			{ suffix = "guest",    label = "shoppers' wifi",      ice = { 0, 0 }, paydata = { 0, 30 } },
+			{ suffix = "pay",      label = "payments mesh",       ice = { 1, 2 }, paydata = { 100, 300 } },
+			{ suffix = "security", label = "mall security",       ice = { 1, 2 }, paydata = { 30, 120 } },
+		} },
+	{ id = "depot", tone = "transit", names = { "%s Freight depot, %a", "%a truck yard" },
+		about = "A freight depot: dispatch, the loading-dock robots and an inventory system that knows what's really in the crates.",
+		parts = {
+			{ suffix = "dispatch", label = "dispatch",            ice = { 1, 1 }, paydata = { 30, 120 } },
+			{ suffix = "docks",    label = "loading docks",       ice = { 1, 1 }, paydata = { 10, 60 } },
+			{ suffix = "inventory", label = "inventory",          ice = { 1, 2 }, paydata = { 100, 350 } },
+		} },
+}
+
+local function fillName(rng, list, first, sur, handle, area)
+	return (rng:pick(list):gsub("%%(%a)", function(c)
+		if c == "f" then return first elseif c == "s" then return sur elseif c == "h" then return handle
+		elseif c == "a" then return area elseif c == "n" then return tostring(rng:int(2, 99)) end
+		return c
+	end))
+end
+
+-- Returns network defs, the same every time for the same seed.
+function Lore.moreLocalNetworks(rng, singles, sites, used)
+	local defs = {}
+	used = used or {}
+	local function addrFor(district, id, suffix)
+		local addr
+		repeat
+			addr = string.format("%s.%s-%02x", district, id, rng:int(0, 255)) .. (suffix and ("." .. suffix) or "")
+		until not used[addr]
+		used[addr] = true
+		return addr
+	end
+	for _ = 1, singles do
+		local kind = rng:pick(Lore.moreKinds)
+		local district = rng:pick(Lore.districts)
+		local area = rng:pick(district.areas)
+		local first, sur, handle = rng:pick(firstNames), rng:pick(surnames), rng:pick(handles)
+		table.insert(defs, {
+			addr = addrFor(district.id, kind.id), name = fillName(rng, kind.names, first, sur, handle, area),
+			org = "civilian", tier = 1, district = district.id, junk = kind.id,
+			ice = rng:int(kind.ice[1], kind.ice[2]), tone = kind.tone,
+			users = kind.id == "radio" and { handle, "dj", "tech" } or { first:lower(), sur:lower(), "staff" },
+			paydata = kind.paydata, tagline = kind.tagline, about = kind.about, reveals = {},
+		})
+	end
+	-- locations: every network there knows the others (the same building, the same router closet)
+	for _ = 1, sites do
+		local kind = rng:pick(Lore.siteKinds)
+		local district = rng:pick(Lore.districts)
+		local area = rng:pick(district.areas)
+		local first, sur, handle = rng:pick(firstNames), rng:pick(surnames), rng:pick(handles)
+		local place = fillName(rng, kind.names, first, sur, handle, area)
+		local base
+		repeat
+			base = string.format("%s.%s-%02x", district.id, kind.id, rng:int(0, 255))
+		until not used[base .. "." .. kind.parts[1].suffix]
+		local group = {}
+		for _, part in ipairs(kind.parts) do
+			local addr = base .. "." .. part.suffix
+			used[addr] = true
+			local def = {
+				addr = addr, name = place .. ", " .. part.label, org = "civilian", tier = 1, district = district.id,
+				junk = kind.id .. "-" .. part.suffix, site = nil, location = place,
+				ice = rng:int(part.ice[1], part.ice[2]), tone = kind.tone,
+				users = { first:lower(), sur:lower(), "staff", part.suffix .. "_admin" },
+				paydata = part.paydata, tagline = place, about = kind.about .. " This one is the " .. part.label .. ".",
+				reveals = {},
+			}
+			table.insert(group, def)
+			table.insert(defs, def)
+		end
+		for _, a in ipairs(group) do
+			for _, b in ipairs(group) do if a ~= b then table.insert(a.reveals, b.addr) end end
+		end
+	end
+	return defs
+end
+
+---------------------------------------------------------------------------
 -- Closed networks: air-gapped, so you can't reach them over the Net. Each one
 -- is bridged from a single access point somewhere in the world; jack into it.
 -- Some are secret corporate labs with experimental research inside.

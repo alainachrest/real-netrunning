@@ -75,6 +75,7 @@ function Network.register(def)
 		about = def.about,
 		district = def.district,
 		junk = def.junk,
+		location = def.location,     -- a place with several networks (modules/lore moreLocalNetworks)
 		closed = def.closed == true, -- air-gapped: only reachable through its gateway
 		isolated = def.isolated == true, -- a device network with no link to the Net: jack into one of its devices
 		lab = def.lab,               -- secret corporate lab: { code, subject }
@@ -117,6 +118,34 @@ function Network.build()
 			table.insert(hub.reveals, def.addr)
 		end
 	end
+	-- more of the street (added later, from its own stream so older saves keep theirs):
+	-- each is found from one of the first local networks
+	local used = {}
+	for _, def in ipairs(junk) do used[def.addr] = true end
+	local more = Lore.moreLocalNetworks(Rng.new(Network.state.seed or 0, "more-locals"), Network.moreLocalCount,
+		Network.locationCount, used)
+	local linkRng = Rng.new(Network.state.seed or 0, "more-links")
+	local firstOfSite = {}
+	for _, def in ipairs(more) do
+		Network.register(def)
+		local location = def.location
+		if location == nil or not firstOfSite[location] then
+			if location then firstOfSite[location] = true end
+			local from = #junk > 0 and Network.nets[junk[linkRng:int(1, #junk)].addr] or hub
+			if from then table.insert(from.reveals, def.addr) end
+		end
+	end
+	-- any local network nothing leads to gets a way in from one of the new ones
+	local revealedBy = {}
+	for _, addr in ipairs(Network.order) do
+		for _, r in ipairs(Network.nets[addr].reveals) do revealedBy[r] = true end
+	end
+	for _, def in ipairs(junk) do
+		if not revealedBy[def.addr] and #more > 0 then
+			local from = Network.nets[more[linkRng:int(1, #more)].addr]
+			if from then table.insert(from.reveals, def.addr) end
+		end
+	end
 	-- closed networks: registered now so progress is kept, found by jacking in
 	local closed = Lore.closedNetworks(Rng.new(Network.state.seed or 0, "closed"), Network.closedJunkCount, Network.labCount)
 	Network.closedJunk, Network.closedLabs = {}, {}
@@ -142,6 +171,8 @@ function Network.build()
 end
 
 Network.junkCount = 48
+Network.moreLocalCount = 24  -- extra single-network businesses
+Network.locationCount = 12   -- locations that run several networks each
 Network.closedJunkCount = 14
 Network.labCount = 10
 

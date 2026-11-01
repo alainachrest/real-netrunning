@@ -127,9 +127,12 @@ Networks outside Night City need an uplink: get root on a network that routes to
 
 ## Local networks
 
-Each save also has 48 small networks scattered across Night City's districts: noodle bars, pawn shops, karaoke clubs, ripperdoc clinics, BD parlours, megabuilding meshes, NCART stations, vending machines, freelance netrunners' rigs and dead nodes nobody switched off. They're generated from the save, so they stay the same every time you load it.
+Each save also has well over a hundred small networks scattered across Night City's districts, generated from the save so they stay the same every time you load it:
 
-- The public subnet leads to one in each district. Each one you own points to a couple more.
+- 72 single networks: noodle bars, pawn shops, karaoke clubs, ripperdoc clinics, BD parlours, megabuilding meshes, NCART stations, vending machines, freelance netrunners' rigs, dead nodes nobody switched off, arcades, gyms, garages, tattoo parlours, laundromats, night markets, temples, pirate radio stations, billboard controllers and parking garages.
+- 12 locations that run several networks, one for each job. A hotel has guest wifi, a staff network, security cameras and front-desk payments; a nightclub has guest wifi, lighting and sound, door security and a back room; a megabuilding has tenants, maintenance, elevators, security and the rent office; and there are clinics (front desk, patient records, medical equipment), malls (shoppers' wifi, payments, security) and freight depots (dispatch, loading docks, inventory). The guest networks are wide open and worthless; the back rooms, patient records, payments and inventories are locked tighter and worth more. Get into any network at a location and you can see the rest of them.
+
+- The public subnet leads to one in each district. Each one you own points to a couple more, and to the newer businesses and locations.
 - They're easy and pay little, but ripperdocs, BD parlours and netrunners' rigs are worth more, and the odd dead node still has something inside.
 - `scan local` lists only these.
 

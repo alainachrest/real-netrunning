@@ -349,7 +349,7 @@ function Territory.worldTick()
 			local hk = Lore.getOrg(holder).kind
 			local w
 			if isRival(attacker, holder) then w = 4
-			elseif attacker == "ncpd" then w = (hk == "gang" and 3) or (holder == "rogueai" and 2) or ((hk == "civilian" or hk == "device") and 0.5) or 0.1
+			elseif attacker == "ncpd" then w = (hk == "gang" and 3) or (holder == "rogueai" and 2) or ((hk == "civilian" or hk == "device") and 0.15) or 0.1
 			elseif org.kind == "gang" then w = (hk == "gang" and 1) or (holder == "ncpd" and 1) or ((hk == "civilian" or hk == "device") and 2) or 0.3
 			else w = ((hk == "corp" or hk == "media") and 1) or (hk == "gang" and 0.4) or 0.3 end
 			if net.tier >= 3 then w = w * 0.2 end
