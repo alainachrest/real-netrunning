@@ -540,7 +540,12 @@ function Territory.onBreached(e)
 		t.attacks[e.addr] = nil
 	end
 	local org = Lore.getOrg(from)
-	if from == "netwatch" then
+	if from == "netwatch" and net.org == "netwatch" then
+		standing("netwatch", -(8 + net.tier), "V broke into NetWatch's own network at " .. e.addr)
+		Network.addHeat(20, "broke into NetWatch's " .. e.addr)
+		Network.addNews("Unknown netrunner breaches NetWatch's own " .. net.name)
+		out("You're inside NetWatch's own network. Every agent in Night City will be looking for you.", "err")
+	elseif from == "netwatch" then
 		standing("netwatch", -(4 + net.tier), "V broke a NetWatch quarantine on " .. e.addr)
 		Network.addHeat(10, "broke a NetWatch quarantine on " .. e.addr)
 		out("You broke NetWatch's quarantine on " .. net.name .. ". They'll want it back, and you.", "err")

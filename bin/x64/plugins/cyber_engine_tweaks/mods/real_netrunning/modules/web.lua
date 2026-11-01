@@ -63,6 +63,8 @@ local sites = {
 		about = "Family first. Respect the neighbourhood." },
 	sixthstreet = { color = YELLOW, tagline = "Santo Domingo neighbourhood watch",
 		about = "Patriots welcome. Outsiders, keep moving." },
+	netwatch    = { color = BLUE,   tagline = "Protecting the Net since 2023.",
+		about = "NetWatch polices the Net worldwide. Unauthorised access to this node will be traced and prosecuted." },
 	mox         = { color = RED,    tagline = "Lizzie's. Everyone's welcome.",
 		about = "The Mox look after their own, and anyone who works under their roof. Touch one of ours and find out." },
 	animals     = { color = RED,    tagline = "Grand Imperial Iron Club",

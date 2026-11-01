@@ -134,7 +134,8 @@ Lore.networks = {
 			"rocklin.nc.clinic", "dynalar.nc.depot", "zhirafa.nc.import", "segatari.nc.showroom" } },
 	{ addr = "ncpd.watson.precinct",           name = "NCPD Watson precinct", org = "ncpd", tier = 1,
 		reveals = { "militech.nc.logistics", "petrochem.badlands.fields", "voodooboys.pacifica.church",
-			"midnightarms.nc.armory", "constitutionalarms.nc.dealer", "budgetarms.nc.outlet", "darra.nc.office", "tsunami.nc.office" } },
+			"midnightarms.nc.armory", "constitutionalarms.nc.dealer", "budgetarms.nc.outlet", "darra.nc.office", "tsunami.nc.office",
+			"netwatch.nc.field" } },
 
 	-- arms and cyberware makers: business news leads to some, NCPD evidence lockers to the gun makers
 	{ addr = "rocklin.nc.clinic", name = "Rocklin Augmentics clinic network", org = "rocklin", tier = 1 },
@@ -146,6 +147,8 @@ Lore.networks = {
 	{ addr = "budgetarms.nc.outlet", name = "Budget Arms outlet", org = "budgetarms", tier = 1 },
 	{ addr = "darra.nc.office", name = "Darra Polytechnic Night City office", org = "darra", tier = 1 },
 	{ addr = "tsunami.nc.office", name = "Tsunami Defense Systems NC office", org = "tsunami", tier = 1 },
+	-- NetWatch's own: the hardest network in Night City, and the angriest to lose
+	{ addr = "netwatch.nc.field",       name = "NetWatch Night City field office", org = "netwatch", tier = 2 },
 	{ addr = "traumateam.nc.dispatch",  name = "Trauma Team NC dispatch", org = "traumateam", tier = 1 },
 	{ addr = "kangtao.nc.branch",       name = "Kang Tao Night City branch", org = "kangtao", tier = 1,
 		reveals = { "kangtao.backbone.pacifica", "delamain.nc.hq" } },
