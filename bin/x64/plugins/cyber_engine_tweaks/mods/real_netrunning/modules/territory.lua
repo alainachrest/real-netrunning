@@ -45,6 +45,16 @@ local Territory = {
 		wraiths = { "aldecaldos" },
 		aldecaldos = { "wraiths", "sixthstreet" },
 		barghest = { "voodooboys", "militech" },
+		ncpd = { "maelstrom", "tygerclaws", "valentinos", "sixthstreet", "animals", "scavengers", "voodooboys" },
+		rocklin = { "dynalar", "zhirafa" },
+		dynalar = { "rocklin", "kiroshi" },
+		zhirafa = { "rocklin", "sovoil" },
+		segatari = { "zetatech", "kiroshi" },
+		midnightarms = { "constitutionalarms", "budgetarms" },
+		constitutionalarms = { "midnightarms", "darra" },
+		budgetarms = { "midnightarms", "darra" },
+		darra = { "tsunami", "budgetarms" },
+		tsunami = { "darra", "militech", "arasaka" },
 		arasaka = { "militech", "kangtao" },
 		militech = { "arasaka", "kangtao", "barghest" },
 		kangtao = { "arasaka", "militech" },
@@ -95,6 +105,8 @@ end
 
 -- Gangs work Night City's streets (closed networks are in the city too).
 local function inGangReach(net) return net.region == "nc" or net.region == "closed" end
+-- gangs and the NCPD only work Night City
+local function cityBound(id, org) return org.kind == "gang" or id == "ncpd" end
 
 function Territory.holder(addr)
 	if Network.isOwned(addr) then return "player" end
@@ -121,6 +133,8 @@ function Territory.factions()
 	for id, org in pairs(Lore.orgs) do
 		if FACTION_KINDS[org.kind] and not seen[id] then seen[id] = true table.insert(list, id) end
 	end
+	-- the NCPD fights for the streets too
+	if not seen.ncpd then table.insert(list, "ncpd") end
 	table.sort(list)
 	return list
 end
@@ -178,7 +192,7 @@ end
 local function standing(org, amount, why)
 	local c = Core.get()
 	if c == nil or org == nil or org == "player" then return end
-	if not FACTION_KINDS[Lore.getOrg(org).kind] and Lore.getOrg(org).kind ~= "media" and org ~= "netwatch" then return end
+	if not FACTION_KINDS[Lore.getOrg(org).kind] and Lore.getOrg(org).kind ~= "media" and org ~= "netwatch" and org ~= "ncpd" then return end
 	c.standing.change(org, amount, why)
 end
 
@@ -330,12 +344,13 @@ function Territory.worldTick()
 		local net = Network.get(addr)
 		local holder = Territory.holder(addr)
 		if Territory.contestable(net) and holder ~= attacker and holder ~= "player" and t.attacks[addr] == nil
-			and not Territory.busy(addr) and (org.kind ~= "gang" or inGangReach(net)) then
+			and not Territory.busy(addr) and (not cityBound(attacker, org) or inGangReach(net)) then
 			-- gangs mostly fight gangs over the streets; corps mostly fight corps
 			local hk = Lore.getOrg(holder).kind
 			local w
 			if isRival(attacker, holder) then w = 4
-			elseif org.kind == "gang" then w = (hk == "gang" and 1) or ((hk == "civilian" or hk == "device") and 2) or 0.3
+			elseif attacker == "ncpd" then w = (hk == "gang" and 3) or (holder == "rogueai" and 2) or ((hk == "civilian" or hk == "device") and 0.5) or 0.1
+			elseif org.kind == "gang" then w = (hk == "gang" and 1) or (holder == "ncpd" and 1) or ((hk == "civilian" or hk == "device") and 2) or 0.3
 			else w = ((hk == "corp" or hk == "media") and 1) or (hk == "gang" and 0.4) or 0.3 end
 			if net.tier >= 3 then w = w * 0.2 end
 			table.insert(options, { addr = addr, w = w })
@@ -413,12 +428,12 @@ function Territory.startRaid(addr)
 	local net = options[rint(1, #options)]
 	-- whoever V took it from wants it back; otherwise the factions V has crossed most
 	local attacker = t.taken[net.addr]
-	local avenger = attacker and (FACTION_KINDS[Lore.getOrg(attacker).kind] or attacker == "netwatch" or attacker == "rogueai")
+	local avenger = attacker and (FACTION_KINDS[Lore.getOrg(attacker).kind] or attacker == "netwatch" or attacker == "rogueai" or attacker == "ncpd")
 	if not avenger or roll() >= 0.6 then
 		local list = {}
 		for _, id in ipairs(Territory.factions()) do
 			local o = Lore.getOrg(id)
-			if o.kind ~= "gang" or inGangReach(net) then
+			if not cityBound(id, o) or inGangReach(net) then
 				table.insert(list, { id = id, w = 1 + math.max(0, -standingOf(id)) / 10 })
 			end
 		end
@@ -520,7 +535,7 @@ function Territory.onBreached(e)
 		standing("netwatch", 2, "V purged a rogue AI from " .. e.addr)
 		Network.addNews("Unknown netrunner purges a rogue AI from " .. net.name)
 		out("You've torn the rogue AI out of " .. net.name .. ". Whatever's left of it may try to come back.", "ok")
-	elseif FACTION_KINDS[org.kind] or org.kind == "media" then
+	elseif FACTION_KINDS[org.kind] or org.kind == "media" or from == "ncpd" then
 		standing(from, -(2 + net.tier), "V took " .. e.addr)
 		for _, r in ipairs(Territory.rivals[from] or {}) do standing(r, 1, "V hit their rival " .. from) end
 		out(org.name .. " won't forget you took " .. net.name .. ". Expect them to come for it.", "warn")
