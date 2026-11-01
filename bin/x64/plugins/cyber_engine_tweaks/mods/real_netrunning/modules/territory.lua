@@ -231,6 +231,13 @@ local function transfer(addr, to, from)
 	t.control[addr] = (to ~= net.org) and to or nil
 	t.since[addr] = t.clock
 	emit("territory.taken", { addr = addr, to = to, from = from })
+	-- the people who work there know about it
+	local cp = Core.get()
+	if cp and cp.people then
+		for _, p in ipairs(cp.people.find({ place = "rn:" .. addr })) do
+			cp.people.remember(p.id, "workplace_taken", Territory.holderName(to) .. " took over the network at work.", to)
+		end
+	end
 	local c = Core.get()
 	if c and c.emit then pcall(c.emit, "network.taken", { addr = addr, to = to, from = from, by = "realnetrunning" }) end
 end

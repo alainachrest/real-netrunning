@@ -868,6 +868,38 @@ function Network.bankStrike(net, b)
 	return st.strikes, st.frozenAt ~= nil
 end
 
+-- People (the shared core's registry): a network's user becomes a real person
+-- the first time something happens to them. Returns their person id, or nil
+-- for service accounts and when the core has no people registry.
+local LIFESTYLE = { corp = "corpo", media = "corpo", lab = "corpo", orbital = "corpo", police = "worker",
+	gang = "street", residential = "worker", shop = "vendor", bar = "nightlife", bd = "nightlife",
+	ripper = "medical", netrunner = "young", fixer = "nightlife", smuggler = "street", abandoned = "street" }
+
+function Network.person(net, user)
+	local c = Core.get()
+	if c == nil or c.people == nil or net == nil or not Junk.isPerson(user) then return nil end
+	local org = Lore.getOrg(net.org)
+	local initial, surname = tostring(user):match("^(%a)%.(%a+)$")
+	local def = {
+		key = "rn:" .. net.addr .. ":" .. user, source = "realnetrunning",
+		place = "rn:" .. net.addr, org = (net.org ~= "civilian" and net.org ~= "unregistered") and net.org or nil,
+		district = net.district, lifestyle = LIFESTYLE[net.tone or org.tone] or "worker",
+		job = net.junk and ("works at " .. net.name) or (org.name .. (org.kind == "gang" and " member" or " staff")),
+	}
+	local function cap(w) return w:sub(1, 1):upper() .. w:sub(2) end
+	local function inList(list, w) for _, n in ipairs(list or {}) do if n:lower() == w then return true end end return false end
+	if surname then
+		def.initial, def.last = initial, cap(surname)
+	elseif inList(Lore.firstNames, user) then
+		def.first = cap(user)       -- a local business's account in the owner's first name
+	elseif inList(Lore.surnames, user) then
+		def.last = cap(user)        -- ...or their surname
+	elseif not user:find("[%._%d]") then
+		def.handle = cap(user)      -- a street name
+	end
+	return c.people.promote(def)
+end
+
 -- What a file says right now (bank accounts show their live balance).
 function Network.fileText(net, node)
 	if node.bank then return Junk.bankText(node.bank, Network.bankStatus(net, node.bank)) end

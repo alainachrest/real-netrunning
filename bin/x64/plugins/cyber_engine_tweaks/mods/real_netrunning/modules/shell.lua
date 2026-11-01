@@ -8,6 +8,7 @@ local Rng = require("modules/rng")
 local NetWatch = require("modules/netwatch")
 local DeviceNet = require("modules/devicenet")
 local Junk = require("modules/junk")
+local Core = require("modules/core")
 local Territory = require("modules/territory")
 
 local Shell = {
@@ -517,7 +518,13 @@ local function drainAccount(net, b, how)
 		" account, through a chain of shell accounts.", "ok")
 	World.notify("Bank transfer: " .. amount .. " eddies")
 	Network.addHeat(b.security >= 3 and 3 or 1, "emptied a bank account on " .. net.addr)
-	emit("hack.bank", { addr = net.addr, org = net.org, value = amount, bank = b.name, how = how, tier = net.tier })
+	-- the owner is a real person now, and this happened to them
+	local who = Network.person(net, b.holder)
+	local c = Core and Core.get()
+	if who and c then
+		c.people.remember(who, "robbed", "Someone emptied their " .. b.name .. " account (" .. amount .. " eddies).", "player")
+	end
+	emit("hack.bank", { addr = net.addr, org = net.org, value = amount, bank = b.name, how = how, tier = net.tier, person = who })
 	addTrace(5)
 end
 
