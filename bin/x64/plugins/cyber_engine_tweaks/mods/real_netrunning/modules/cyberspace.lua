@@ -618,12 +618,16 @@ local function placeScenery(i)
 	local floors = Network.floors(net)
 	local x, y, z = centre(i)
 	local o = Kit.sceneryOffset
-	prop(Cyber.props, Kit.ambience(org, net.tier), x + o.x, y + o.y, z + o.z, 0)
-	prop(Cyber.props, Kit.templates.particles, x - o.y, y, z + o.z, 0)
-	prop(Cyber.props, Kit.templates.blocks, x + o.y, y - o.y / 2, z + o.z, 45)
+	-- keep the big pieces clear of the floor, however many rooms it has
+	local L = Cyber.floors[i] and Cyber.floors[i].layout
+	local half = math.max(L and L.w or Kit.navGrid, L and L.h or Kit.navGrid) * Kit.roomSize / 2
+	local d = math.max(o.y, half + Kit.sceneryClearance)
+	prop(Cyber.props, Kit.ambience(org, net.tier), x + o.x, y + d, z + o.z, 0)
+	prop(Cyber.props, Kit.templates.particles, x - d, y, z + o.z, 0)
+	prop(Cyber.props, Kit.templates.blocks, x + d, y - d / 2, z + o.z, 45)
 	for _, f in ipairs(floors) do
 		if f.kind == "black" then
-			prop(Cyber.props, Kit.templates.blackwall, x, y + o.y * 1.5, z - Kit.floorGap * 3, 180)
+			prop(Cyber.props, Kit.templates.blackwall, x, y + d * 1.5, z - Kit.floorGap * 3, 180)
 			break
 		end
 	end

@@ -34,6 +34,7 @@ Kit.defaultLightColour = 1 -- netrunner blue
 Kit.lightLevel = 0.8   -- rooms' own light (markers keep theirs)
 -- the big scenery (point clouds, particles) stands well away from the platforms
 Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
+Kit.sceneryClearance = 120.0  -- at least this far beyond the floor's edge (the Mikoshi blocks are huge)
 Kit.useRadius = 2.6      -- how close V must be to use an object
 Kit.fallLimit = 25.0     -- falling this far below a floor puts V back on it
 
