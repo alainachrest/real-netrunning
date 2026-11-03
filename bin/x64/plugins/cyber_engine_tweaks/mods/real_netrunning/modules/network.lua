@@ -634,7 +634,7 @@ local NO_BANK_TONES = { device = true, vending = true, transit = true }
 -- Clutter, home folders and bank accounts (modules/junk), from their own random
 -- stream so the rest of a network's files stay exactly as they were.
 local function addClutter(net, root, floors, users, org, gen)
-	if net.kind == "site" then return end
+	local site = net.kind == "site"
 	local home = net.kind == "computer" and net.addr:find("^home%.") ~= nil -- V's own computers
 	local rng = gen > 0 and Rng.new(Network.state.seed or 0, "clutter", net.addr, "gen", gen)
 		or Rng.new(Network.state.seed or 0, "clutter", net.addr)
@@ -652,7 +652,9 @@ local function addClutter(net, root, floors, users, org, gen)
 	for i, f in ipairs(floors) do
 		local dir = Network.floorFolder(i, f)
 		local function add(path, file) addNew(root, dir .. "/" .. path, file) end
-		if f.kind == "lobby" then
+		if site then
+			-- a website's own pages are its data; only the leftovers below
+		elseif f.kind == "lobby" then
 			if not home then Junk.lobby(rng, add, ctx) end
 		elseif f.kind == "ice" or f.kind == "black" then
 			Junk.ice(rng, add)
@@ -671,8 +673,9 @@ local function addClutter(net, root, floors, users, org, gen)
 		end
 		-- leftovers scattered through the floor's rooms, so they aren't empty:
 		-- about one bit of data per room in cyberspace (rooms on a floor, as
-		-- Cyber.layout sizes it: keep in step)
-		if not home then
+		-- Cyber.layout sizes it: keep in step). V's own computers too: caches
+		-- and swap pile up on everyone's machine.
+		do
 			local side = 4
 			if f.kind == "files" or f.kind == "control" then side = side + 1 end
 			if net.ice >= 4 or net.tier >= 2 then side = side + 1 end
