@@ -432,7 +432,14 @@ local function buildFloor(net, i, f, count)
 			local rx, ry = cellCentre(i, L, x, y)
 			block(floor, { x = rx, y = ry, z = cz - 0.5, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.5, kind = 0 })
 			-- each room's own glow, just under the ceiling
-			block(floor, { x = rx, y = ry, z = cz + Kit.wallHeight - 0.8, yaw = 0, hx = r / 2, hy = r / 2, hz = 0.1, kind = 4 })
+			-- (a grid of them: one light can't fill a 32 m room without the corners going dark)
+			local n = Kit.lightsPerSide
+			for a = 0, n - 1 do
+				for b = 0, n - 1 do
+					block(floor, { x = rx - r / 2 + (a + 0.5) * r / n, y = ry - r / 2 + (b + 0.5) * r / n,
+						z = cz + Kit.wallHeight - 0.8, yaw = 0, hx = r / n / 2, hy = r / n / 2, hz = 0.1, kind = 4 })
+				end
+			end
 			-- cyberspace particles drifting through the room
 			if Kit.particleRooms > 0 and (x + y) % Kit.particleRooms == 0 then
 				local id = World.spawnBlock(rx, ry, cz + Kit.wallHeight / 2, 0, r / 2, r / 2, Kit.wallHeight / 2, Kit.particleKind)

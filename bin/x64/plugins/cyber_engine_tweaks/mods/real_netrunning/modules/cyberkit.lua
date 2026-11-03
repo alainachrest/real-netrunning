@@ -32,6 +32,7 @@ Kit.defaultWalls = 3     -- walls: Mikoshi cyberspace wall
 Kit.defaultScale = 1.3   -- the prison platform looks right a little larger
 Kit.defaultLightColour = 1 -- netrunner blue
 Kit.lightLevel = 0.8   -- rooms' own light (markers keep theirs)
+Kit.lightsPerSide = 2  -- each room is lit by a grid of lights, this many per side
 -- the big scenery (point clouds, particles) stands well away from the platforms
 Kit.sceneryOffset = { x = 0.0, y = 140.0, z = -40.0 }
 Kit.sceneryClearance = 120.0  -- at least this far beyond the floor's edge (the Mikoshi blocks are huge)
