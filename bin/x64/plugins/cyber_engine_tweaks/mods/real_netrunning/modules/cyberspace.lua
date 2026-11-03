@@ -132,8 +132,23 @@ end
 -- Layout: every floor is a small complex of rooms joined by doorways
 ---------------------------------------------------------------------------
 
-local function centre(i)
-	return Kit.origin.x, Kit.origin.y, Kit.origin.z - (i - 1) * Kit.floorGap
+-- Floor i goes in slot ((i - 1) mod slots) + 1: each slot is its own spot with
+-- its own navmesh, so the floor V is on and the one below never overlap.
+local function slotOf(i)
+	return (i - 1) % Kit.slots + 1
+end
+
+local function corner(i)
+	local s = slotOf(i)
+	return Kit.slotCorner.x + (s - 1) * Kit.slotStep, Kit.slotCorner.y, Kit.origin.z - (s - 1) * Kit.floorGap
+end
+
+-- The middle of floor i (rooms run from the slot's corner, one per navmesh tile).
+local function centre(i, L)
+	L = L or (Cyber.floors[i] and Cyber.floors[i].layout)
+	local x, y, z = corner(i)
+	local w, h = L and L.w or Kit.navGrid, L and L.h or Kit.navGrid
+	return x + w * Kit.roomSize / 2, y + h * Kit.roomSize / 2, z
 end
 
 -- The rooms of floor i. A branching maze (randomised Prim's algorithm: it grows
@@ -248,7 +263,7 @@ function Cyber.layout(net, i, f)
 end
 
 local function cellCentre(i, layout, x, y)
-	local cx, cy, cz = centre(i)
+	local cx, cy, cz = centre(i, layout)
 	local r = Kit.roomSize
 	return cx + (x - (layout.w - 1) / 2) * r, cy + (y - (layout.h - 1) / 2) * r, cz
 end
@@ -383,13 +398,33 @@ local function wall(floor, along, mx, my, z, door)
 	end
 end
 
+-- The maze's doorways, as the navmesh's world variants: open where the maze
+-- has a doorway, shut everywhere else (another network may have left them open).
+local function setNavmeshDoors(i, L)
+	local ref = string.format(Kit.navmeshRef, slotOf(i))
+	local n = Kit.navGrid
+	for x = 0, n - 1 do
+		for y = 0, n - 1 do
+			if x + 1 < n then
+				local open = x + 1 < L.w and y < L.h and L.doors[L.key(x, y, x + 1, y)] == true
+				World.toggleVariant(ref, "door_e_" .. x .. "_" .. y, open)
+			end
+			if y + 1 < n then
+				local open = x < L.w and y + 1 < L.h and L.doors[L.key(x, y, x, y + 1)] == true
+				World.toggleVariant(ref, "door_n_" .. x .. "_" .. y, open)
+			end
+		end
+	end
+end
+
 local function buildFloor(net, i, f, count)
-	local cx, cy, cz = centre(i)
+	local L = Cyber.layout(net, i, f)
+	local cx, cy, cz = centre(i, L)
 	local floor = { z = cz, tiles = {}, specs = {}, props = {}, ice = {}, iceHostile = {}, corpses = {}, objects = {}, kind = f.kind }
 	Cyber.floors[i] = floor
-	local L = Cyber.layout(net, i, f)
 	floor.layout = L
 	local r = Kit.roomSize
+	setNavmeshDoors(i, L)
 
 	-- slabs and walls
 	for x = 0, L.w - 1 do
@@ -572,23 +607,33 @@ function Cyber.ensureFloors(i)
 	return fresh
 end
 
-local function build()
+-- The big scenery around the floor V is on (floors sit in separate spots, so it
+-- moves with V from floor to floor).
+local function placeScenery(i)
+	for _, id in ipairs(Cyber.props) do World.despawnProp(id) end
+	Cyber.props = {}
 	local net = Network.get(Cyber.addr)
+	if net == nil then return end
 	local org = Lore.getOrg(net.org)
 	local floors = Network.floors(net)
-	Cyber.floors, Cyber.objects, Cyber.props = {}, {}, {}
-	local x, y, z = centre(1)
+	local x, y, z = centre(i)
 	local o = Kit.sceneryOffset
 	prop(Cyber.props, Kit.ambience(org, net.tier), x + o.x, y + o.y, z + o.z, 0)
 	prop(Cyber.props, Kit.templates.particles, x - o.y, y, z + o.z, 0)
 	prop(Cyber.props, Kit.templates.blocks, x + o.y, y - o.y / 2, z + o.z, 45)
 	for _, f in ipairs(floors) do
 		if f.kind == "black" then
-			prop(Cyber.props, Kit.templates.blackwall, x, y + o.y * 1.5, z - Kit.floorGap * #floors / 2, 180)
+			prop(Cyber.props, Kit.templates.blackwall, x, y + o.y * 1.5, z - Kit.floorGap * 3, 180)
 			break
 		end
 	end
+	Cyber.sceneryFloor = i
+end
+
+local function build()
+	Cyber.floors, Cyber.objects, Cyber.props = {}, {}, {}
 	Cyber.ensureFloors(Cyber.startFloor or 1)
+	placeScenery(Cyber.startFloor or 1)
 end
 
 local function clear()
@@ -678,6 +723,7 @@ local function moveToFloor(i, fromBelow, waited)
 	World.teleport(Cyber.target.x, Cyber.target.y, Cyber.target.z, Cyber.target.yaw)
 	Cyber.floor = i
 	Cyber.prompt = nil
+	if Cyber.sceneryFloor ~= i then placeScenery(i) end
 	Cyber.huntersFollow(i, fromBelow)
 	local net = Network.get(Cyber.addr)
 	Cyber.setCwd("/" .. Network.floorFolder(i, Network.floors(net)[i]))

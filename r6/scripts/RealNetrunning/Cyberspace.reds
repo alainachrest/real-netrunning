@@ -70,6 +70,17 @@ public class RNCyberspaceSystem extends ScriptableSystem {
             .Get(n"RealNetrunning.RNCyberspaceSystem") as RNCyberspaceSystem;
     }
 
+    // Switches a world variant (Codeware's WorldStateSystem), as quests do. The
+    // cyberspace navmesh's doorways are world variants: see cyberkit.lua.
+    public func ToggleVariant(ref: String, name: String, state: Bool) -> Bool {
+        let ws = GameInstance.GetWorldStateSystem();
+        if !IsDefined(ws) {
+            return false;
+        }
+        ws.ToggleVariant(CreateNodeRef(ref), StringToName(name), state);
+        return true;
+    }
+
     private func OnAttach() {
         this.m_scale = 1.3;
         this.m_style = 2;

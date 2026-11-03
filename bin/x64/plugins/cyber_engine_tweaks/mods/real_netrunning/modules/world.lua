@@ -479,6 +479,11 @@ function World.spawnBlock(x, y, z, yaw, hx, hy, hz, kind)
 	return World.cyberCall("SpawnBlock", x, y, z, yaw or 0, hx, hy, hz, kind or 0)
 end
 
+-- Switches a world variant on or off (Cyberspace.reds, through Codeware).
+function World.toggleVariant(ref, name, state)
+	return World.cyberCall("ToggleVariant", ref, name, state == true)
+end
+
 -- Tells redscript V is in cyberspace (blocks manual saves).
 function World.setJackedIn(on)
 	return try(function()

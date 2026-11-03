@@ -12,7 +12,18 @@ Kit.origin = { x = -1085.0, y = 880.0, z = 9000.0 }
 
 -- Each floor of a network is a square platform; floors are stacked downwards.
 Kit.floorGap = 18.0      -- metres between floors
-Kit.roomSize = 16.0      -- each floor is a grid of 16 x 16 m rooms
+Kit.roomSize = 32.4      -- each floor is a grid of square rooms, one per navmesh tile
+
+-- Navmesh (so NPCs can walk the mazes): RealNetrunning_CyberspaceNavmesh.archive,
+-- built by the navmesh framework's tools/rn_cyberspace.py. Every room sits on one
+-- 32.4 m navmesh tile; each doorway is a world variant the mod switches on when
+-- it generates the maze. Floors go in fixed slots, each its own spot. Keep these
+-- in step with rn_cyberspace.py.
+Kit.slots = 12                                   -- floor slots with navmesh
+Kit.slotCorner = { x = -34 * 32.4, y = 27 * 32.4 } -- corner of room (0, 0) on slot 1
+Kit.slotStep = 324.0                             -- metres between slots (along x)
+Kit.navGrid = 8                                  -- rooms per side the navmesh covers
+Kit.navmeshRef = "$/real_netrunning/cyberspace/#floor_%d"
 Kit.doorWidth = 4.0      -- doorways between rooms
 Kit.wallHeight = 6.0
 Kit.wallThickness = 0.5
