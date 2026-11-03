@@ -669,6 +669,17 @@ local function addClutter(net, root, floors, users, org, gen)
 				for _, u in ipairs(users) do Junk.home(rng, add, ctx, u) end
 			end
 		end
+		-- leftovers scattered through the floor's rooms, so they aren't empty:
+		-- about one bit of data per room in cyberspace (rooms on a floor, as
+		-- Cyber.layout sizes it: keep in step)
+		if not home then
+			local side = 4
+			if f.kind == "files" or f.kind == "control" then side = side + 1 end
+			if net.ice >= 4 or net.tier >= 2 then side = side + 1 end
+			if net.tier >= 3 then side = side + 2 end
+			side = math.min(8, side) + 0.5
+			Junk.fragments(rng, add, math.floor(side * side * 0.8))
+		end
 	end
 end
 

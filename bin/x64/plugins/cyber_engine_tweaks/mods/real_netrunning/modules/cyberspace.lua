@@ -296,14 +296,14 @@ local function floorFiles(net, i, f)
 		end
 	end
 	if root then walk(root, "/" .. folder) end
-	-- a room holds 12 at most: paydata and bank accounts first, then the rest in order
+	-- a floor shows Kit.maxFilesPerFloor at most: paydata and bank accounts first, then the rest in order
 	local function rank(file) return file.node.paydata and 0 or (file.node.bank and 1 or 2) end
 	for i, file in ipairs(list) do file.order = i end
 	table.sort(list, function(a, b)
 		if rank(a) ~= rank(b) then return rank(a) < rank(b) end
 		return a.order < b.order
 	end)
-	while #list > 12 do table.remove(list) end
+	while #list > Kit.maxFilesPerFloor do table.remove(list) end
 	return list
 end
 
@@ -497,22 +497,48 @@ local function buildFloor(net, i, f, count)
 		floor.gateUse = { x = doorX + (px - doorX) * 0.18, y = doorY + (py - doorY) * 0.18 }
 	end
 
-	-- data objects: dead-end rooms first (worth exploring), then the rest
+	-- data objects, in little groups: dead-end rooms first (worth exploring),
+	-- then the rest, so as many rooms as possible have something in them
 	local rooms = {}
 	for _, c in ipairs(L.deadEnds) do table.insert(rooms, c) end
 	for _, c in ipairs(L.others) do table.insert(rooms, c) end
 	if #rooms == 0 then rooms = { L.start } end
-	local slots = { { -4, -4 }, { 4, 4 }, { -4, 4 }, { 4, -4 } }
+	local files = floorFiles(net, i, f)
+	local total = #files + ((f.kind == "control") and 1 or 0)
+	local prng = Rng.new(Network.state.seed or 0, "placing", net.addr, i)
+	-- how many go in each room: with enough for every room, every room gets one
+	-- and the rest make little groups; with fewer, groups of one or two
+	local perRoom = {}
+	local slotsLeft = #rooms * #Kit.objectSlots
+	total = math.min(total, slotsLeft)
+	if total >= #rooms then
+		for r = 1, #rooms do perRoom[r] = 1 end
+		local left = total - #rooms
+		while left > 0 do
+			local r = prng:int(1, #rooms)
+			local n = math.min(left, prng:int(1, 2), #Kit.objectSlots - perRoom[r])
+			perRoom[r] = perRoom[r] + n
+			left = left - n
+		end
+	else
+		local left, r = total, 1
+		while left > 0 and r <= #rooms do
+			local n = math.min(left, prng:int(1, 2))
+			perRoom[r] = n
+			left, r = left - n, r + 1
+		end
+	end
+	local order = {}
+	for r = 1, #rooms do for _ = 1, perRoom[r] or 0 do table.insert(order, r) end end
 	local used = {}
 	local function place(k)
-		local room = rooms[(k - 1) % #rooms + 1]
+		local room = rooms[order[k] or ((k - 1) % #rooms + 1)]
 		local rid = room[1] .. "," .. room[2]
 		used[rid] = (used[rid] or 0) + 1
-		local slot = slots[(used[rid] - 1) % #slots + 1]
+		local slot = Kit.objectSlots[(used[rid] - 1) % #Kit.objectSlots + 1]
 		local rx, ry = cellCentre(i, L, room[1], room[2])
 		return rx + slot[1], ry + slot[2]
 	end
-	local files = floorFiles(net, i, f)
 	for k, file in ipairs(files) do
 		local x, y = place(k)
 		addObject(i, "file", x, y, cz, fileLabel(net, file), { path = file.path, node = file.node })

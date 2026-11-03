@@ -180,8 +180,20 @@ end
 -- Each generator calls add(path, file), path relative to the floor folder.
 
 function Junk.lobby(rng, add, ctx)
-	for _ = 1, rng:int(1, 3) do
+	for _ = 1, rng:int(2, 5) do
 		add(string.format("notices/notice_%02d.txt", rng:int(1, 99)), { text = rng:pick(notices) })
+	end
+	local visits = {}
+	for _ = 1, rng:int(4, 9) do
+		table.insert(visits, timestamp(rng) .. " guest session from " .. ip(rng) .. (rng:chance(0.2) and " (dropped)" or ""))
+	end
+	add("visitors.log", { text = table.concat(visits, "\n") })
+	if rng:chance(0.6) then
+		add("welcome.txt", { text = "Welcome to " .. ctx.name .. ".\nPublic services only past this point. " ..
+			"Staff: use your assigned node. Everyone else: you are being logged." })
+	end
+	for _ = 1, rng:int(0, 2) do
+		add(string.format("cache/page_%04x.tmp", rng:int(0, 65535)), { text = "[cached public page]" })
 	end
 	if rng:chance(0.5) then
 		add("terms_of_use.txt", { text = "By connecting to " .. ctx.name .. " you agree to be monitored, logged, " ..
@@ -197,8 +209,20 @@ function Junk.ice(rng, add)
 		table.insert(lines, timestamp(rng) .. " " .. line)
 	end
 	add("daemon.log", { text = table.concat(lines, "\n") })
-	if rng:chance(0.4) then
+	for _ = 1, rng:int(1, 4) do
 		add(string.format("quarantine/frag_%04x.bin", rng:int(0, 65535)), { text = "[corrupted fragment, unreadable]" })
+	end
+	for _ = 1, rng:int(1, 3) do
+		local cap = {}
+		for _ = 1, rng:int(3, 6) do
+			table.insert(cap, timestamp(rng) .. " " .. ip(rng) .. " -> " .. ip(rng) .. " " .. rng:int(40, 9000) .. " bytes" ..
+				(rng:chance(0.25) and " [flagged]" or ""))
+		end
+		add(string.format("captures/cap_%04x.pcap", rng:int(0, 65535)), { text = table.concat(cap, "\n") })
+	end
+	if rng:chance(0.5) then
+		add(string.format("rejected/session_%05d.dump", rng:int(0, 99999)), { text = "Session from " .. ip(rng) ..
+			" terminated by ICE.\nReason: " .. rng:pick({ "signature match", "trace complete", "unauthorised daemon", "flooding" }) })
 	end
 end
 
@@ -208,6 +232,15 @@ function Junk.gate(rng, add)
 		table.insert(lines, timestamp(rng) .. (rng:chance(0.3) and " attempt FAILED from " or " attempt ok from ") .. ip(rng))
 	end
 	add("attempts.log", { text = table.concat(lines, "\n") })
+	local banned = {}
+	for _ = 1, rng:int(2, 6) do table.insert(banned, ip(rng)) end
+	add("lockouts.txt", { text = "Locked out for 24h:\n" .. table.concat(banned, "\n") })
+	if rng:chance(0.5) then
+		add(string.format("old/credentials_%d.bak", rng:int(2060, 2076)), { text = "[hash table, expired: every entry rotated since]" })
+	end
+	for _ = 1, rng:int(0, 2) do
+		add(string.format("cache/challenge_%04x.tmp", rng:int(0, 65535)), { text = "[spent challenge token]" })
+	end
 end
 
 function Junk.control(rng, add)
@@ -218,10 +251,28 @@ function Junk.control(rng, add)
 		table.insert(lines, timestamp(rng) .. " " .. line)
 	end
 	add("diagnostics.log", { text = table.concat(lines, "\n") })
+	for _ = 1, rng:int(1, 3) do
+		local r = {}
+		for _ = 1, rng:int(3, 6) do
+			table.insert(r, timestamp(rng) .. " sensor " .. rng:int(1, 40) .. ": " .. rng:int(0, 999) .. (rng:chance(0.15) and " (out of range)" or ""))
+		end
+		add(string.format("readings/batch_%03d.csv", rng:int(1, 999)), { text = table.concat(r, "\n") })
+	end
+	if rng:chance(0.6) then
+		add(string.format("firmware/notes_v%d.%d.txt", rng:int(1, 9), rng:int(0, 30)),
+			{ text = rng:pick({ "Patch pending. Do not reboot during business hours.", "Vendor support ended. We're on our own.",
+				"Rolled back after the last update bricked half the floor.", "Default password still set on two units. Ticket open." }) })
+	end
 end
 
 function Junk.core(rng, add)
 	for _ = 1, rng:int(1, 2) do
+		add(string.format("dumps/kernel_%04x.core", rng:int(0, 65535)), { text = "[memory dump]" })
+	end
+	if rng:chance(0.5) then
+		add("routing.table", { text = "default via " .. ip(rng) .. "\n" .. ip(rng) .. " via " .. ip(rng) .. "\n" .. ip(rng) .. " blackholed" })
+	end
+	for _ = 1, rng:int(2, 4) do
 		add(string.format("backups/config_%04x.bak", rng:int(0, 65535)), { text = "[configuration backup]" })
 	end
 	local lines = {}
@@ -229,6 +280,27 @@ function Junk.core(rng, add)
 		table.insert(lines, timestamp(rng) .. " root login " .. (rng:chance(0.8) and "ok" or "FAILED") .. " from " .. ip(rng))
 	end
 	add("audit.log", { text = table.concat(lines, "\n") })
+end
+
+-- Leftovers anywhere on a network: caches, remnants, rotated logs. Up to n
+-- (fewer if the names collide, which is fine).
+local remnants = {
+	{ "cache/blk_%04x.tmp", "[cached block, no longer referenced]" },
+	{ "cache/thumb_%04x.img", "[thumbnail cache]" },
+	{ "deleted/remnant_%04x.dat", "[deleted file remnant: 12%% recoverable, nothing worth reading]" },
+	{ "deleted/mail_%04x.eml", "[deleted message, body overwritten]" },
+	{ "logs/rotated_%04x.log.gz", "[rotated log, compressed]" },
+	{ "swap/page_%04x.swp", "[swap page]" },
+	{ "orphans/obj_%04x.bin", "[orphaned object, owner unknown]" },
+	{ "telemetry/t_%04x.json", "{\"uptime\": %d, \"errors\": %d}" },
+}
+function Junk.fragments(rng, add, n)
+	for _ = 1, n do
+		local r = rng:pick(remnants)
+		local text = r[2]
+		if text:find("%%d") then text = text:format(rng:int(10, 99999), rng:int(0, 40)) else text = text:gsub("%%%%", "%%") end
+		add(r[1]:format(rng:int(0, 65535)), { text = text })
+	end
 end
 
 -- Shared folders on a files floor: work documents and leftovers.

@@ -43,6 +43,9 @@ Kit.fallLimit = 25.0     -- falling this far below a floor puts V back on it
 Kit.arrival = { x = 0.0, y = -8.0 }  -- where V lands; also the way back up
 Kit.descent = { x = 0.0, y = 9.5 }   -- the way down to the next floor
 Kit.ringRadius = 6.5                 -- data objects stand in a ring
+Kit.maxFilesPerFloor = 60            -- files shown as objects on one floor
+-- where a room's objects stand, from its middle (kept off the lines between doorways)
+Kit.objectSlots = { { -6, -6 }, { 6, 6 }, { -6, 6 }, { 6, -6 }, { -11, -4 }, { 11, 4 }, { -4, 11 }, { 4, -11 } }
 
 Kit.templates = {
 	-- around the whole network
