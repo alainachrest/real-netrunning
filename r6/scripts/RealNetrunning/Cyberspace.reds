@@ -65,6 +65,10 @@ public class RNCyberspaceSystem extends ScriptableSystem {
     private let m_scanNames: array<String>;
     private let m_scanFactions: array<String>;
 
+    // the move each cyberspace NPC was last told to make (so a new one replaces it)
+    private let m_moveIDs: array<EntityID>;
+    private let m_moveCmds: array<ref<AIMoveToCommand>>;
+
     public static func Get() -> ref<RNCyberspaceSystem> {
         return GameInstance.GetScriptableSystemsContainer(GetGameInstance())
             .Get(n"RealNetrunning.RNCyberspaceSystem") as RNCyberspaceSystem;
@@ -72,6 +76,64 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // Switches a world variant (Codeware's WorldStateSystem), as quests do. The
     // cyberspace navmesh's doorways are world variants: see cyberkit.lua.
+    // Tells an NPC to walk (or run) to a point the game's own way: it plans a path
+    // on the navmesh (the cyberspace navmesh goes through the maze's doorways) and
+    // walks it. Its combat AI takes over if a fight starts. False if it can't.
+    public func WalkNPC(id: EntityID, x: Float, y: Float, z: Float, run: Bool) -> Bool {
+        let puppet = GameInstance.FindEntityByID(GetGameInstance(), id) as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return false;
+        }
+        let ai = puppet.GetAIControllerComponent();
+        if !IsDefined(ai) {
+            return false;
+        }
+        let i = 0;
+        let slot = -1;
+        while i < ArraySize(this.m_moveIDs) {
+            if Equals(this.m_moveIDs[i], id) {
+                slot = i;
+            }
+            i += 1;
+        }
+        if slot >= 0 && IsDefined(this.m_moveCmds[slot]) {
+            ai.CancelCommand(this.m_moveCmds[slot]);
+        }
+        let target: WorldPosition;
+        WorldPosition.SetVector4(target, Vector4(x, y, z, 1.0));
+        let spec: AIPositionSpec;
+        AIPositionSpec.SetWorldPosition(spec, target);
+        let cmd = new AIMoveToCommand();
+        cmd.movementTarget = spec;
+        cmd.movementType = run ? moveMovementType.Run : moveMovementType.Walk;
+        cmd.ignoreNavigation = false;
+        cmd.useStart = true;
+        cmd.useStop = true;
+        cmd.desiredDistanceFromTarget = 1.0;
+        cmd.finishWhenDestinationReached = true;
+        cmd.ignoreInCombat = true;
+        if slot >= 0 {
+            this.m_moveCmds[slot] = cmd;
+        } else {
+            ArrayPush(this.m_moveIDs, id);
+            ArrayPush(this.m_moveCmds, cmd);
+        }
+        return ai.SendCommand(cmd);
+    }
+
+    // Forgets an NPC's last move (when it's despawned).
+    public func ForgetNPCMove(id: EntityID) {
+        let i = 0;
+        while i < ArraySize(this.m_moveIDs) {
+            if Equals(this.m_moveIDs[i], id) {
+                ArrayErase(this.m_moveIDs, i);
+                ArrayErase(this.m_moveCmds, i);
+                return;
+            }
+            i += 1;
+        }
+    }
+
     public func ToggleVariant(ref: String, name: String, state: Bool) -> Bool {
         let ws = GameInstance.GetWorldStateSystem();
         if !IsDefined(ws) {

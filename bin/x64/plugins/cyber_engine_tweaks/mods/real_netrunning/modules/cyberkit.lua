@@ -150,6 +150,10 @@ Kit.encounterEvery = 30      -- seconds between rolls for a rival or rogue AI
 Kit.encounterMax = 2         -- at most this many at once
 Kit.patrolHop = 6            -- seconds between a patrol's moves
 Kit.huntHop = 3              -- seconds between a hunter's moves
+-- ICE walks the maze on the navmesh (the game's own pathing and combat movement);
+-- off: it jumps from room to room as before (also what happens if walking fails)
+Kit.iceWalks = true
+Kit.patrolRetarget = 45       -- seconds before a patrol gives up on a room it can't reach
 Kit.patrolSight = 2          -- rooms away (through doorways) a patrol notices V from
 Kit.deepFloor = 3            -- from this floor down, unowned networks raise trace...
 Kit.deepTrace = 0.08         -- ...by this much per second for each floor from there, more on bigger networks

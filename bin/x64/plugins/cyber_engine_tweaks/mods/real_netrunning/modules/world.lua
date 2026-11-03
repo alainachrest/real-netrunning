@@ -290,6 +290,7 @@ function World.deleteNPC(id)
 	if id == nil then return end
 	try(function() Game.GetDynamicEntitySystem():DeleteEntity(id) end)
 	World.cyberCall("ClearScannerName", id)
+	World.cyberCall("ForgetNPCMove", id)
 end
 
 -- What the scanner shows for a spawned NPC: its name and affiliation (Cyberspace.reds).
@@ -306,6 +307,13 @@ function World.moveNPC(id, x, y, z, yaw)
 		Game.GetTeleportationFacility():Teleport(npc, Vector4.new(x, y, z, 1.0), EulerAngles.new(0, 0, yaw or 0))
 		return true
 	end) == true
+end
+
+-- Tells a spawned NPC to walk (run = true: run) to a point, pathing on the
+-- navmesh (Cyberspace.reds). true if it took the order.
+function World.walkNPC(id, x, y, z, run)
+	if id == nil then return false end
+	return World.cyberCall("WalkNPC", id, x, y, z, run == true) == true
 end
 
 -- Where a spawned NPC is: { x, y, z }, or nil.

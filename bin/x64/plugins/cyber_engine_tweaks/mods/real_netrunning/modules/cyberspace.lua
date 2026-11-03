@@ -1252,6 +1252,44 @@ local function rewardFor(h)
 	emit("cyber.hunter_defeated", { addr = Cyber.addr, kind = h.kind })
 end
 
+-- Walking ICE: hunters run to wherever V is, patrols walk to a room somewhere
+-- in the maze and pick another when they get there. The navmesh routes them
+-- through the doorways. False if the NPC wouldn't take the order (no navmesh,
+-- or walking is off), and then it moves room to room the old way.
+local function walkHunter(h, L, here, every)
+	local floor = Cyber.floors[h.floor]
+	if floor == nil then return false end
+	local x, y
+	if h.mode == "hunt" then
+		local v = World.playerTransform()
+		if v == nil then return false end
+		x, y = v.x, v.y
+		h.target = nil
+	else
+		local p = World.npcPosition(h.id)
+		local t = h.target
+		local arrived = t and p and math.abs(p.x - t.x) + math.abs(p.y - t.y) < 3
+		h.targetAge = (h.targetAge or 0) + every
+		if t and not arrived and h.targetAge < Kit.patrolRetarget then return true end -- still on its way
+		local room = { math.floor(roll() * L.w), math.floor(roll() * L.h) }
+		if room[1] == h.room[1] and room[2] == h.room[2] then
+			local options = doorsFrom(L, h.room)
+			room = options[math.floor(roll() * #options) + 1] or room
+		end
+		local cx, cy = cellCentre(h.floor, L, room[1], room[2])
+		-- somewhere in the room, not always its middle
+		x = cx + (roll() - 0.5) * (Kit.roomSize - 8)
+		y = cy + (roll() - 0.5) * (Kit.roomSize - 8)
+		h.target, h.targetAge = { x = x, y = y }, 0
+	end
+	if not World.walkNPC(h.id, x, y, floor.z, h.mode == "hunt") then
+		h.walking, h.target = false, nil
+		return false
+	end
+	h.walking = true
+	return true
+end
+
 local function updateHunter(h, dt, here)
 	if h.gone then return end
 	if h.follow then
@@ -1301,16 +1339,24 @@ local function updateHunter(h, dt, here)
 		World.notify("ICE is hunting you")
 	end
 	if steps == 0 then
-		h.hop = 0
 		-- fighting the network's own ICE is loud
 		if h.kind == "patrol" then Cyber.addTrace(dt * 0.5) end
-		return
+		if not h.announced and h.mode == "hunt" and h.walking then
+			h.announced = true
+			World.warn((h.name or "Something") .. " is here")
+		end
+		-- walkers keep closing in (their combat AI takes over once they see V)
+		if not (Kit.iceWalks and h.walking) then
+			h.hop = 0
+			return
+		end
 	end
 
 	h.hop = h.hop + dt
 	local every = h.mode == "hunt" and Kit.huntHop or Kit.patrolHop
 	if h.hop < every then return end
 	h.hop = 0
+	if Kit.iceWalks and walkHunter(h, L, here, every) then return end
 	local nextRoom
 	if h.mode == "hunt" then
 		nextRoom = stepToward(L, h.room, here)
