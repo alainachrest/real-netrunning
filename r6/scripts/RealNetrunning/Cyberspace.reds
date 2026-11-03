@@ -259,9 +259,15 @@ public class RNCyberspaceSystem extends ScriptableSystem {
 
     // Lights that fill a room of the given half width with soft colour: a main
     // light under the ceiling and a softer fill light near the floor.
+    // Linear fall-off, so one light reaches the corners of a big room without a
+    // glaring spot under it (one light per room keeps the light count down).
     private func AddLight(template: ref<EntityBuilderTemplateWrapper>, half: Float) {
-        template.AddComponent(this.MakeLight(half * 2.2, 9000.0, 0.0));
-        template.AddComponent(this.MakeLight(half * 1.8, 3000.0, -4.0));
+        let main = this.MakeLight(half * 2.2, 9000.0, 0.0);
+        main.attenuation = rendLightAttenuation.LA_Linear;
+        template.AddComponent(main);
+        let fill = this.MakeLight(half * 1.8, 3000.0, -4.0);
+        fill.attenuation = rendLightAttenuation.LA_Linear;
+        template.AddComponent(fill);
     }
 
     private func MakeLight(radius: Float, lumens: Float, z: Float) -> ref<LightComponent> {
